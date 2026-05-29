@@ -180,7 +180,6 @@ input[type=number].score-field { max-width: 100px; text-align: center; font-size
 <script>
 // ── 學年清單（依 sequence_number 排序）──────────────────────────────────────
 const GRADES = [
-  { id: 0,  label: '學前零' },
   { id: 1,  label: '學前一' },
   { id: 2,  label: '學前二' },
   { id: 3,  label: '學前三' },
@@ -230,13 +229,26 @@ function save(key, val) {
 
 // ── 初始化種子資料 ─────────────────────────────────────────────────────────
 function initData() {
-  if (!localStorage.getItem('ld_inited_v8')) { localStorage.removeItem('ld_inited');
+  // 首次初始化（全新安裝）
+  if (!localStorage.getItem('ld_inited_v1_base')) {
     save('ld_accounts',   DEFAULT_ACCOUNTS);
     save('ld_classrooms', DEFAULT_CLASSROOMS);
     save('ld_slots',      []);
     save('ld_bookings',   []);
     save('ld_records',    []);
-    localStorage.setItem('ld_inited_v8', '1');
+    localStorage.setItem('ld_inited_v1_base', '1');
+    localStorage.setItem('ld_accounts_v9', '1');
+    localStorage.setItem('ld_classrooms_v9', '1');
+    return;
+  }
+  // 僅更新帳號和教室資料（保留老師設定的時段、預約、紀錄）
+  if (!localStorage.getItem('ld_accounts_v9')) {
+    save('ld_accounts',   DEFAULT_ACCOUNTS);
+    localStorage.setItem('ld_accounts_v9', '1');
+  }
+  if (!localStorage.getItem('ld_classrooms_v9')) {
+    save('ld_classrooms', DEFAULT_CLASSROOMS);
+    localStorage.setItem('ld_classrooms_v9', '1');
   }
 }
 
