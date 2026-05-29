@@ -1467,7 +1467,7 @@ function buildBookingsPage(user) {
     <select id="bk-filter-status" class="form-control" style="width:auto;font-size:.8rem">
       <option value="">全部狀態</option>
       <option value="unfilled">待填寫</option>
-      <option value="filled">已填寫</option>
+      <option value="filled">已記錄</option>
       <option value="cancelled">已取消</option>
     </select>
   </div>
@@ -1548,7 +1548,7 @@ function renderBookingsTable(container, user) {
   // 額外判斷是否為家長主動取消
   function getOutcomeDisplay(b, rec) {
     if (b.status === 'cancelled' && b.cancelledBy === 'parent') {
-      return [`家長取消${b.cancelReason ? '：' + b.cancelReason : ''}`, 'badge-red'];
+      return ['家長主動取消', 'badge-red'];
     }
     if (!rec?.outcome) return ['待填寫', 'badge-amber'];
     if (rec.outcome === '3' && rec.absentReason) {
@@ -1577,15 +1577,17 @@ function renderBookingsTable(container, user) {
       <td>${slot ? fmtDate(slot.date) : '-'}</td>
       <td style="font-family:var(--font-body);font-weight:600">${slot?.time || '-'}</td>
       <td>
-        ${b.status==='cancelled'
-          ? `<span style="font-size:.8rem;color:var(--red-700);font-family:var(--font-zh)">${b.cancelledBy==='parent'?'家長取消':'取消'}${b.cancelReason?'：'+b.cancelReason:''}</span>`
+        ${b.status==='cancelled' && b.cancelReason
+          ? `<span style="font-size:.8rem;color:var(--red-700);font-family:var(--font-zh)">原因：${b.cancelReason}</span>`
           : (b.note||b.note_text) ? `<span style="font-size:.8rem;color:var(--gray-700);font-family:var(--font-zh);max-width:140px;display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${b.note||''}">${b.note||''}</span>` : '<span class="text-muted text-xs">—</span>'}
       </td>
       <td><span class="badge ${outcomeCls}">${outcomeLabel}</span></td>
-      <td class="flex gap-8">
-        <button class="btn btn-sm btn-primary" data-open-record="${b.id}">
-          ${icon('edit','icon')} ${b.status==='cancelled' ? '查看' : rec?.outcome ? '修改' : '填寫'}紀錄
-        </button>
+      <td>
+        ${b.status === 'cancelled' && b.cancelledBy === 'parent'
+          ? '<span class="badge badge-red" style="font-size:.75rem">家長主動取消</span>'
+          : `<button class="btn btn-sm btn-primary" data-open-record="${b.id}">
+              ${icon('edit','icon')} ${rec?.outcome ? '修改' : '填寫'}紀錄
+             </button>`}
       </td>
     </tr>`;
   }).join('');
