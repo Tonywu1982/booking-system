@@ -454,7 +454,19 @@ const bookingsDB = {
     _cache.bookings = [...(_cache.bookings||[]), bk];
   },
   update: async (id, patch) => {
-    await DB.updateBooking(id, patch);
+    // Convert camelCase patch keys to snake_case for Supabase
+    const dbPatch = {};
+    const keyMap = {
+      studentName: 'student_name', parentName: 'parent_name',
+      classroomId: 'classroom_id', slotId: 'slot_id',
+      gradeId: 'grade_id', createdAt: 'created_at',
+      cancelReason: 'cancel_reason', cancelledAt: 'cancelled_at',
+      cancelledBy: 'cancelled_by',
+    };
+    Object.entries(patch).forEach(([k, v]) => {
+      dbPatch[keyMap[k] || k] = v;
+    });
+    await DB.updateBooking(id, dbPatch);
     _cache.bookings = (_cache.bookings||[]).map(b => b.id===id ? {...b,...patch} : b);
   },
 };
@@ -502,11 +514,14 @@ function statsForClassroom(cid) {
 function normalizeBooking(b) {
   return {
     ...b,
-    slotId:      b.slotId      || b.slot_id,
-    classroomId: b.classroomId || b.classroom_id,
-    studentName: b.studentName || b.student_name,
-    parentName:  b.parentName  || b.parent_name  || '',
-    gradeId:     b.gradeId     ?? b.grade_id,
+    slotId:       b.slotId      || b.slot_id,
+    classroomId:  b.classroomId || b.classroom_id,
+    studentName:  b.studentName || b.student_name,
+    parentName:   b.parentName  || b.parent_name  || '',
+    gradeId:      b.gradeId     ?? b.grade_id,
+    cancelReason: b.cancelReason || b.cancel_reason || '',
+    cancelledBy:  b.cancelledBy  || b.cancelled_by  || '',
+    cancelledAt:  b.cancelledAt  || b.cancelled_at  || '',
   };
 }
 function normalizeRecord(r) {
@@ -1453,6 +1468,7 @@ function buildBookingsPage(user) {
       <option value="">全部狀態</option>
       <option value="unfilled">待填寫</option>
       <option value="filled">已填寫</option>
+      <option value="cancelled">已取消</option>
     </select>
   </div>
   <div class="table-wrap">
@@ -1498,11 +1514,12 @@ function renderBookingsTable(container, user) {
 
   const slotIds = slotsDB.byClassroom(user.classroomId).map(s => s.id);
   let bookings  = bookingsDB.all()
-    .filter(b => slotIds.includes(b.slotId))
+    .filter(b => slotIds.includes(b.slotId || b.slot_id))
     .filter(b => {
       if (!fStatus) return true;
+      if (fStatus === 'cancelled') return b.status === 'cancelled';
       const rec = recordsDB.byBooking(b.id);
-      if (fStatus === 'unfilled') return !rec?.outcome;
+      if (fStatus === 'unfilled') return b.status !== 'cancelled' && !rec?.outcome;
       if (fStatus === 'filled')   return !!rec?.outcome;
       return true;
     });
@@ -1560,7 +1577,9 @@ function renderBookingsTable(container, user) {
       <td>${slot ? fmtDate(slot.date) : '-'}</td>
       <td style="font-family:var(--font-body);font-weight:600">${slot?.time || '-'}</td>
       <td>
-        ${(b.note||b.note_text) ? `<span style="font-size:.8rem;color:var(--gray-700);font-family:var(--font-zh);max-width:140px;display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${b.note||''}">${b.note||''}</span>` : '<span class="text-muted text-xs">—</span>'}
+        ${b.status==='cancelled'
+          ? `<span style="font-size:.8rem;color:var(--red-700);font-family:var(--font-zh)">${b.cancelledBy==='parent'?'家長取消':'取消'}${b.cancelReason?'：'+b.cancelReason:''}</span>`
+          : (b.note||b.note_text) ? `<span style="font-size:.8rem;color:var(--gray-700);font-family:var(--font-zh);max-width:140px;display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${b.note||''}">${b.note||''}</span>` : '<span class="text-muted text-xs">—</span>'}
       </td>
       <td><span class="badge ${outcomeCls}">${outcomeLabel}</span></td>
       <td class="flex gap-8">
