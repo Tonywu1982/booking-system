@@ -2438,27 +2438,51 @@ function renderClassroomsTable(container, keyword) {
   let list = classroomsDB.all();
   if (keyword) list = list.filter(c => c.name.includes(keyword));
   if (!list.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="table-empty">${keyword ? '查無符合教室' : '尚無教室'}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="table-empty">查無符合教室</td></tr>`;
     return;
   }
   tbody.innerHTML = list.map(c => {
-    const teachers = accountsDB.all().filter(a => a.classroomId === c.id && a.role === 'teacher').length;
+    const isActive = c.active !== false;
+    const teachers = accountsDB.all().filter(a => (a.classroomId||a.classroom_id) === c.id && a.role === 'teacher').length;
     const bookings = bookingsDB.byClassroom(c.id).length;
-    return `<tr>
-      <td class="fw-600 text-zh">${c.name}</td>
-      <td><span class="badge badge-blue">${c.region||'—'}</span></td>
-      <td class="text-muted text-sm" style="white-space:nowrap">${c.phone || '—'}</td>
+    return `<tr style="${isActive?'':'opacity:.55'}">
+      <td>
+        <div class="fw-600 text-zh">${c.name}</div>
+        <div class="text-xs text-muted">${c.city||''}${c.district||''} ／ ${c.region||'—'}</div>
+      </td>
+      <td class="text-muted text-sm" style="white-space:nowrap">${c.phone||'—'}</td>
       <td>${teachers} 位</td>
       <td>${bookings}</td>
-      <td class="flex gap-8">
-        <button class="btn btn-sm" data-view-cls="${c.id}">${icon('eye','icon')} 預約詳情</button>
+      <td><span class="badge ${isActive?'badge-green':'badge-red'}">${isActive?'營業中':'已停用'}</span></td>
+      <td class="flex gap-8" style="flex-wrap:nowrap">
+        <button class="btn btn-sm" data-view-cls="${c.id}">${icon('eye','icon')} 預約</button>
         <button class="btn btn-sm btn-primary" data-open-cls="${c.id}">${icon('edit','icon')} 編輯</button>
+        <button class="btn btn-sm ${isActive?'btn-danger':''}" data-toggle-cls="${c.id}" data-active="${isActive}">
+          ${isActive?'停用':'啟用'}
+        </button>
       </td>
     </tr>`;
   }).join('');
 
+  // 綁定按鈕事件
   tbody.querySelectorAll('[data-open-cls]').forEach(btn => {
     btn.addEventListener('click', () => openClsModal(container, btn.dataset.openCls));
+  });
+
+  tbody.querySelectorAll('[data-toggle-cls]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const isActive = btn.dataset.active === 'true';
+      const cls = classroomsDB.get(btn.dataset.toggleCls);
+      if (!cls) return;
+      if (!confirm(`確定要${isActive?'停用':'啟用'}「${cls.name}」？${isActive?'\n停用後家長將無法預約此教室。':''}`)) return;
+      try {
+        await classroomsDB.update(btn.dataset.toggleCls, { active: !isActive });
+        renderClassroomsTable(container, container.querySelector('#cls-search')?.value||'',
+          container.querySelector('#cls-filter-region')?.value||'',
+          container.querySelector('#cls-filter-active')?.value||'');
+        showToast(`${cls.name} 已${isActive?'停用':'啟用'}`, 'success');
+      } catch(e) { showToast('操作失敗：'+e.message, 'error'); }
+    });
   });
 }
 
