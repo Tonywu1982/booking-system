@@ -722,26 +722,44 @@ function parseAddressCityDistrict(addr) {
 }
 
 function buildActiveHierarchy() {
-  const hier = {};
-  const CITY_ORDER = ['基隆市','台北市','新北市','桃園市','新竹市','新竹縣','苗栗縣',
-    '台中市','彰化縣','南投縣','雲林縣','嘉義市','嘉義縣',
-    '台南市','高雄市','屏東縣','宜蘭縣','花蓮縣','台東縣','澎湖縣'];
+  // 以靜態 CLASSROOM_HIERARCHY 為基礎（地址已正確解析）
+  // 過濾掉已停用的教室，並補上動態新增的教室
+  const activeIds = new Set(
+    classroomsDB.all()
+      .filter(c => c.active !== false)
+      .map(c => c.id)
+  );
 
+  const result = {};
+  // 從靜態 hierarchy 複製有效教室
+  Object.keys(CLASSROOM_HIERARCHY).forEach(city => {
+    Object.keys(CLASSROOM_HIERARCHY[city]).forEach(dist => {
+      const items = CLASSROOM_HIERARCHY[city][dist].filter(c => activeIds.has(c.id));
+      if (items.length > 0) {
+        if (!result[city]) result[city] = {};
+        result[city][dist] = items;
+      }
+    });
+  });
+
+  // 補上動態新增的教室（不在靜態 hierarchy 裡的）
+  const staticIds = new Set(
+    Object.values(CLASSROOM_HIERARCHY)
+      .flatMap(dists => Object.values(dists).flat())
+      .map(c => c.id)
+  );
   classroomsDB.all()
-    .filter(c => c.active !== false)
+    .filter(c => c.active !== false && !staticIds.has(c.id))
     .forEach(c => {
-      const city = c.city || '其他';
-      const dist = c.district || '其他';
-      if (!hier[city]) hier[city] = {};
-      if (!hier[city][dist]) hier[city][dist] = [];
-      hier[city][dist].push({ id: c.id, label: `${c.name}`, phone: c.phone||'', address: c.address||'' });
+      const parsed = parseAddressCityDistrict(c.address||'');
+      const city   = parsed.city || '其他';
+      const dist   = parsed.district || '其他';
+      if (!result[city]) result[city] = {};
+      if (!result[city][dist]) result[city][dist] = [];
+      result[city][dist].push({ id: c.id, label: c.name, phone: c.phone||'', address: c.address||'' });
     });
 
-  // 排序：縣市北到南，地區字母順序
-  const sorted = {};
-  CITY_ORDER.forEach(city => { if (hier[city]) sorted[city] = hier[city]; });
-  Object.keys(hier).forEach(city => { if (!sorted[city]) sorted[city] = hier[city]; });
-  return sorted;
+  return result;
 }
 
 
