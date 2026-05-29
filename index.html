@@ -468,11 +468,13 @@ const recordsDB = {
   },
   upsert: async rec  => {
     const dbRec = {
-      booking_id:  rec.bookingId,
-      outcome:     rec.outcome,
-      other_note:  rec.otherNote||'',
-      teacher_id:  rec.teacherId||'',
-      saved_at:    rec.savedAt||new Date().toISOString(),
+      booking_id:      rec.bookingId,
+      outcome:         rec.outcome,
+      other_note:      rec.otherNote||'',
+      absent_reason:   rec.absentReason||'',
+      absent_followup: rec.absentFollowup||'',
+      teacher_id:      rec.teacherId||'',
+      saved_at:        rec.savedAt||new Date().toISOString(),
     };
     await DB.upsertRecord(dbRec);
     const list = (_cache.records||[]).filter(r => (r.bookingId||r.booking_id) !== rec.bookingId);
@@ -508,7 +510,7 @@ function normalizeBooking(b) {
   };
 }
 function normalizeRecord(r) {
-  return { ...r, bookingId: r.bookingId || r.booking_id, otherNote: r.otherNote || r.other_note || '' };
+  return { ...r, bookingId: r.bookingId || r.booking_id, otherNote: r.otherNote || r.other_note || '', absentReason: r.absentReason || r.absent_reason || '', absentFollowup: r.absentFollowup || r.absent_followup || '' };
 }
 function normalizeSlot(s) {
   return { ...s, classroomId: s.classroomId || s.classroom_id };
@@ -969,8 +971,17 @@ function goToStep(container, step) {
 function renderSlotPicker(container, classroomId) {
   selectedSlotId = null;
   const area = container.querySelector('#slot-picker-area');
+  const settings = getSettings();
+  const now = new Date();
+  const maxDate = new Date(now.getTime() + settings.bookingWindowDays * 86400000);
+  const minTime = new Date(now.getTime() + settings.minHoursAhead * 3600000);
+
   const slots = slotsDB.byClassroom(classroomId)
-    .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+    .filter(s => {
+      const slotDt = new Date((s.date||s.slot_date) + 'T' + s.time + ':00');
+      return slotDt >= minTime && slotDt <= maxDate;  // 在允許範圍內
+    })
+    .sort((a, b) => (a.date||'').localeCompare(b.date||'') || (a.time||'').localeCompare(b.time||''));
 
   // Group by date
   const byDate = {};
@@ -980,7 +991,8 @@ function renderSlotPicker(container, classroomId) {
   });
 
   if (Object.keys(byDate).length === 0) {
-    area.innerHTML = `<div class="alert alert-amber">${icon('info','icon')} 目前此教室尚無開放時段，請聯絡教室或稍後再查詢。</div>`;
+    const windowMsg = `（目前僅顯示 ${settings.minHoursAhead} 小時後至 ${settings.bookingWindowDays} 天內的時段）`;
+    area.innerHTML = `<div class="alert alert-amber">${icon('info','icon')} 目前此教室在可預約範圍內無開放時段，請聯絡教室或稍後再查詢。<div class="text-xs mt-8">${windowMsg}</div></div>`;
     return;
   }
 
@@ -1101,38 +1113,182 @@ function renderQueryResult(container, phone) {
   const result = container.querySelector('#query-result');
   if (!phone) { result.innerHTML = `<div class="form-error">請輸入電話號碼</div>`; return; }
 
-  const bookings = bookingsDB.all()
+  const allBookings = bookingsDB.all();
+  const bookings = allBookings
     .filter(b => b.phone === phone)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    .sort((a, b) => (b.createdAt||'').localeCompare(a.createdAt||''));
 
   if (bookings.length === 0) {
     result.innerHTML = `<div class="alert alert-amber">${icon('info','icon')} 查無此電話的預約紀錄</div>`;
     return;
   }
 
-  const statusMap = { pending: ['待診斷','badge-amber'], done: ['已完成','badge-green'], cancelled: ['已取消','badge-gray'] };
+  function canCancel(b) {
+    if (b.status === 'cancelled') return false;
+    const rec = recordsDB.byBooking(b.id);
+    if (rec?.outcome) return false;       // 已填寫紀錄不可取消
+    const slot = slotsDB.all().find(s => s.id === (b.slotId||b.slot_id));
+    if (!slot) return false;
+    const slotDt = new Date(slot.date + 'T' + slot.time + ':00');
+    return slotDt > new Date();           // 未到診斷時間才可取消
+  }
 
-  let rows = bookings.map(b => {
-    const slot = slotsDB.get(b.slotId);
-    const cls  = classroomsDB.get(b.classroomId);
-    const [label, cls2] = statusMap[b.status] || ['未知','badge-gray'];
-    return `<tr>
-      <td>${b.studentName}</td>
-      <td>${slot ? fmtDate(slot.date) : '-'}</td>
-      <td>${slot?.time || '-'}</td>
-      <td>${b.subject}</td>
-      <td>${cls?.name || '-'}</td>
-      <td><span class="badge ${cls2}">${label}</span></td>
-    </tr>`;
-  }).join('');
+  function buildRows() {
+    return bookingsDB.all()
+      .filter(b => b.phone === phone)
+      .sort((a, b) => (b.createdAt||'').localeCompare(a.createdAt||''))
+      .map(b => {
+        const slot  = slotsDB.all().find(s => s.id === (b.slotId||b.slot_id));
+        const cls   = classroomsDB.get(b.classroomId||b.classroom_id);
+        const isCancelled = b.status === 'cancelled';
+        const rec   = recordsDB.byBooking(b.id);
+        let statusLabel, statusCls;
+        if (isCancelled) {
+          statusLabel = '已取消'; statusCls = 'badge-gray';
+        } else if (rec?.outcome) {
+          const OMAP = {'1':'已出席已註冊','2':'已出席未註冊','3':'未出席','4':'取消重預約','5':'其他'};
+          statusLabel = OMAP[rec.outcome]||'已記錄'; statusCls = 'badge-green';
+        } else {
+          statusLabel = '待診斷'; statusCls = 'badge-amber';
+        }
+        const cancellable = canCancel(b);
+        return `<tr data-booking-id="${b.id}">
+          <td class="fw-600 text-zh">${b.studentName||b.student_name||''}</td>
+          <td>${b.subject||''}</td>
+          <td>${slot ? fmtDate(slot.date) : '-'}</td>
+          <td style="font-family:var(--font-body);font-weight:600">${slot?.time||'-'}</td>
+          <td class="text-zh text-sm">${cls?.name||'-'}</td>
+          <td><span class="badge ${statusCls}">${statusLabel}</span></td>
+          <td>
+            ${cancellable
+              ? `<button class="btn btn-sm btn-danger btn-cancel-booking" data-bid="${b.id}"
+                   data-student="${b.studentName||b.student_name||''}"
+                   data-date="${slot?.date||''}" data-time="${slot?.time||''}"
+                   data-cls="${cls?.name||''}">
+                   取消預約
+                 </button>`
+              : `<span class="text-xs text-muted">—</span>`}
+          </td>
+        </tr>`;
+      }).join('');
+  }
 
-  result.innerHTML = `
-    <div class="table-wrap">
-      <table class="table">
-        <thead><tr><th>學生</th><th>家長</th><th>日期</th><th>時間</th><th>科目</th><th>教室</th><th>狀態</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
+  function renderTable() {
+    result.innerHTML = `
+      <div class="alert alert-info" style="margin-bottom:10px">
+        ${icon('info','icon')}
+        <span>如需取消，請於診斷時間前操作。已完成診斷紀錄的預約無法取消。</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>學生</th><th>科目</th><th>日期</th><th>時間</th><th>教室</th><th>狀態</th><th>操作</th></tr></thead>
+          <tbody>${buildRows()}</tbody>
+        </table>
+      </div>
+
+      <!-- 取消確認 Modal -->
+      <div id="cancel-modal" class="modal-backdrop hidden">
+        <div class="modal">
+          <div class="modal-header">
+            <div class="modal-title">確認取消預約</div>
+            <button class="modal-close" id="cancel-modal-close">${icon('x','icon')}</button>
+          </div>
+          <div id="cancel-modal-body"></div>
+          <div class="form-group" style="margin-top:14px">
+            <label class="form-label">取消原因（選填）</label>
+            <select id="cancel-reason" class="form-control">
+              <option value="">請選擇原因</option>
+              <option value="時間衝突">時間衝突，需改期</option>
+              <option value="不需要了">不需要了</option>
+              <option value="已改其他教室">已改約其他教室</option>
+              <option value="其他">其他原因</option>
+            </select>
+          </div>
+          <div id="cancel-reason-other-wrap" class="form-group hidden">
+            <label class="form-label">請說明原因</label>
+            <input id="cancel-reason-other" class="form-control" placeholder="請輸入原因">
+          </div>
+          <div class="modal-footer">
+            <button class="btn" id="cancel-modal-no">返回</button>
+            <button class="btn btn-danger" id="cancel-modal-yes">確認取消此預約</button>
+          </div>
+        </div>
+      </div>`;
+
+    let pendingCancelId = null;
+
+    // Bind cancel buttons
+    result.querySelectorAll('.btn-cancel-booking').forEach(btn => {
+      btn.addEventListener('click', () => {
+        pendingCancelId = btn.dataset.bid;
+        const student   = btn.dataset.student;
+        const date      = btn.dataset.date ? fmtDate(btn.dataset.date) : '';
+        const time      = btn.dataset.time;
+        const cls       = btn.dataset.cls;
+        document.getElementById('cancel-modal-body').innerHTML = `
+          <div style="background:var(--gray-50);border-radius:var(--radius-md);padding:14px 16px;font-family:var(--font-zh);font-size:.875rem;line-height:2;margin-bottom:4px">
+            <div>👤 學生：<strong>${student}</strong></div>
+            <div>📅 日期：<strong>${date} ${time}</strong></div>
+            <div>🏫 教室：<strong>${cls}</strong></div>
+          </div>
+          <p class="text-zh" style="font-size:.875rem;color:var(--red-700);margin-top:10px">
+            ⚠️ 取消後時段將釋出，若需重新預約請重新填寫表單。
+          </p>`;
+        document.getElementById('cancel-modal').classList.remove('hidden');
+        document.getElementById('cancel-reason').value = '';
+        document.getElementById('cancel-reason-other-wrap').classList.add('hidden');
+      });
+    });
+
+    // Reason selector
+    result.querySelector('#cancel-reason').addEventListener('change', function() {
+      const wrap = document.getElementById('cancel-reason-other-wrap');
+      wrap.classList.toggle('hidden', this.value !== '其他');
+    });
+
+    // Close modal
+    result.querySelector('#cancel-modal-close').addEventListener('click', () => {
+      document.getElementById('cancel-modal').classList.add('hidden');
+    });
+    result.querySelector('#cancel-modal-no').addEventListener('click', () => {
+      document.getElementById('cancel-modal').classList.add('hidden');
+    });
+
+    // Confirm cancel
+    result.querySelector('#cancel-modal-yes').addEventListener('click', async () => {
+      if (!pendingCancelId) return;
+      const reason = document.getElementById('cancel-reason').value;
+      const otherReason = document.getElementById('cancel-reason-other')?.value?.trim() || '';
+      const finalReason = reason === '其他' ? (otherReason || '其他') : (reason || '家長取消');
+
+      const b = bookingsDB.all().find(bk => bk.id === pendingCancelId);
+
+      // Update booking status
+      await bookingsDB.update(pendingCancelId, {
+        status: 'cancelled',
+        cancelReason: finalReason,
+        cancelledAt: new Date().toISOString(),
+        cancelledBy: 'parent',
+      });
+
+      // Upsert record with outcome 4 (取消)
+      await recordsDB.upsert({
+        bookingId: pendingCancelId,
+        outcome: '4',
+        otherNote: `家長取消：${finalReason}`,
+        savedAt: new Date().toISOString(),
+        teacherId: 'parent',
+      });
+
+      document.getElementById('cancel-modal').classList.add('hidden');
+      showToast('預約已取消，時段已釋出', 'success');
+
+      // Re-render table
+      renderTable();
+    });
+  }
+
+  renderTable();
 }
 
 
@@ -1301,7 +1457,7 @@ function buildBookingsPage(user) {
   </div>
   <div class="table-wrap">
     <table class="table">
-      <thead><tr><th>學生</th><th>學年</th><th>日期</th><th>時間</th><th>狀態</th><th>操作</th></tr></thead>
+      <thead><tr><th>學生</th><th>學年</th><th>日期</th><th>時間</th><th>家長備註</th><th>狀態</th><th>操作</th></tr></thead>
       <tbody id="bk-tbody"></tbody>
     </table>
   </div>
@@ -1372,15 +1528,24 @@ function renderBookingsTable(container, user) {
     '4': ['取消重預約',     'badge-amber'],
     '5': ['其他',           'badge-gray'],
   };
+  // 額外判斷是否為家長主動取消
+  function getOutcomeDisplay(b, rec) {
+    if (b.status === 'cancelled' && b.cancelledBy === 'parent') {
+      return [`家長取消${b.cancelReason ? '：' + b.cancelReason : ''}`, 'badge-red'];
+    }
+    if (!rec?.outcome) return ['待填寫', 'badge-amber'];
+    if (rec.outcome === '3' && rec.absentReason) {
+      return [`未出席：${rec.absentReason}`, 'badge-red'];
+    }
+    return OUTCOME_MAP[rec.outcome] || ['已記錄', 'badge-gray'];
+  }
   const colors = ['av-green','av-amber','av-blue'];
 
   tbody.innerHTML = bookings.map((b, i) => {
     const slot  = slotsDB.get(b.slotId);
     const grade = GRADES.find(g => g.id === b.gradeId);
     const rec   = recordsDB.byBooking(b.id);
-    const [outcomeLabel, outcomeCls] = rec?.outcome
-      ? (OUTCOME_MAP[rec.outcome] || ['已記錄','badge-gray'])
-      : ['待填寫','badge-amber'];
+    const [outcomeLabel, outcomeCls] = getOutcomeDisplay(b, rec);
     return `<tr>
       <td>
         <div class="flex items-center gap-8">
@@ -1394,10 +1559,13 @@ function renderBookingsTable(container, user) {
       <td>${grade?.label || '-'}</td>
       <td>${slot ? fmtDate(slot.date) : '-'}</td>
       <td style="font-family:var(--font-body);font-weight:600">${slot?.time || '-'}</td>
+      <td>
+        ${(b.note||b.note_text) ? `<span style="font-size:.8rem;color:var(--gray-700);font-family:var(--font-zh);max-width:140px;display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${b.note||''}">${b.note||''}</span>` : '<span class="text-muted text-xs">—</span>'}
+      </td>
       <td><span class="badge ${outcomeCls}">${outcomeLabel}</span></td>
       <td class="flex gap-8">
         <button class="btn btn-sm btn-primary" data-open-record="${b.id}">
-          ${icon('edit','icon')} ${rec?.outcome ? '修改' : '填寫'}紀錄
+          ${icon('edit','icon')} ${b.status==='cancelled' ? '查看' : rec?.outcome ? '修改' : '填寫'}紀錄
         </button>
       </td>
     </tr>`;
@@ -1410,48 +1578,88 @@ function renderBookingsTable(container, user) {
 
 function openRecordModal(container, user, bookingId) {
   const b     = bookingsDB.get(bookingId);
-  const slot  = slotsDB.get(b?.slotId);
-  const grade = GRADES.find(g => g.id === b?.gradeId);
+  const slot  = slotsDB.all().find(s => s.id === (b?.slotId||b?.slot_id));
+  const grade = GRADES.find(g => g.id === (b?.gradeId ?? b?.grade_id));
   const rec   = recordsDB.byBooking(bookingId) || {};
   const modal = container.querySelector('#record-modal');
 
   const OUTCOMES = [
-    { value: '1', label: '已出席學診，已註冊', icon: '✅', badge: 'badge-green' },
-    { value: '2', label: '已出席學診，未註冊', icon: '📋', badge: 'badge-blue' },
-    { value: '3', label: '未出席學診',          icon: '❌', badge: 'badge-red' },
+    { value: '1', label: '已出席學診，已註冊',           icon: '✅', badge: 'badge-green' },
+    { value: '2', label: '已出席學診，未註冊',           icon: '📋', badge: 'badge-blue'  },
+    { value: '3', label: '未出席學診',                   icon: '❌', badge: 'badge-red'   },
     { value: '4', label: '此次預約取消，已請家長重新預約', icon: '🔄', badge: 'badge-amber' },
-    { value: '5', label: '其他',                icon: '📝', badge: 'badge-gray' },
+    { value: '5', label: '其他',                         icon: '📝', badge: 'badge-gray'  },
   ];
 
-  const curOutcome = rec.outcome || '';
+  // 未出席原因選項
+  const ABSENT_REASONS = [
+    '臨時有事，無法出席',
+    '忘記預約時間',
+    '孩子生病',
+    '家長無法接送',
+    '聯繫不上家長',
+    '其他原因',
+  ];
 
-  container.querySelector('#record-modal-title').textContent = `${b.studentName} 後續狀況記錄`;
+  const curOutcome      = rec.outcome      || '';
+  const curAbsentReason = rec.absentReason || '';
+  const curOtherNote    = rec.otherNote    || '';
+
+  container.querySelector('#record-modal-title').textContent = `${b.studentName||b.student_name} 後續狀況記錄`;
 
   container.querySelector('#record-modal-body').innerHTML = `
     <div class="flex items-center gap-12 mb-16 p-12" style="background:var(--gray-50);border-radius:var(--radius-md)">
       <div class="text-zh" style="font-size:.875rem;line-height:2">
-        <div><strong>學生：</strong>${b.studentName} ／ ${grade?.label || ''} ／ ${b.subject || ''}</div>
+        <div><strong>學生：</strong>${b.studentName||b.student_name} ／ ${grade?.label||''} ／ ${b.subject||''}</div>
+        <div><strong>家長：</strong>${b.parentName||b.parent_name||'—'}</div>
+        <div><strong>電話：</strong>${b.phone||''}</div>
         <div><strong>時間：</strong>${slot ? fmtDate(slot.date)+' '+slot.time : '-'}</div>
-        ${b.note ? `<div><strong>家長備註：</strong>${b.note}</div>` : ''}
-        ${rec.outcome ? `<div><strong>已記錄：</strong>${OUTCOMES.find(o=>o.value===rec.outcome)?.label || ''}</div>` : ''}
+        ${(b.note||b.note_text) ? `<div><strong>家長備註：</strong>${b.note||b.note_text}</div>` : ''}
+        ${rec.outcome ? `<div><strong>已記錄：</strong>${OUTCOMES.find(o=>o.value===rec.outcome)?.label||''}${rec.absentReason?' ／ '+rec.absentReason:''}</div>` : ''}
       </div>
     </div>
 
     <div class="form-group">
-      <label class="form-label">請選擇後續狀況 <span class="req">*</span></label>
+      <label class="form-label">後續狀況 <span class="req">*</span></label>
       <div id="outcome-options" style="display:flex;flex-direction:column;gap:8px;margin-top:6px">
         ${OUTCOMES.map(o => `
-          <label style="display:flex;align-items:center;gap:12px;padding:12px 16px;border:1.5px solid var(--gray-100);border-radius:var(--radius-md);cursor:pointer;transition:.12s;background:var(--white)" class="outcome-label ${curOutcome === o.value ? 'outcome-selected' : ''}" data-val="${o.value}">
-            <input type="radio" name="outcome" value="${o.value}" ${curOutcome === o.value ? 'checked' : ''} style="width:16px;height:16px;accent-color:#7DCDF4;flex-shrink:0">
+          <label style="display:flex;align-items:center;gap:12px;padding:12px 16px;border:1.5px solid var(--gray-100);border-radius:var(--radius-md);cursor:pointer;transition:.12s;background:var(--white)"
+                 class="outcome-label ${curOutcome===o.value?'outcome-selected':''}" data-val="${o.value}">
+            <input type="radio" name="outcome" value="${o.value}" ${curOutcome===o.value?'checked':''} style="width:16px;height:16px;accent-color:#7DCDF4;flex-shrink:0">
             <span style="font-size:1.1rem">${o.icon}</span>
             <span class="text-zh" style="font-size:.9rem;font-weight:${curOutcome===o.value?'600':'400'}">${o.label}</span>
           </label>`).join('')}
       </div>
     </div>
 
-    <div id="other-note-wrap" class="form-group ${curOutcome === '5' ? '' : 'hidden'}">
+    <!-- 未出席原因（選項3時出現）-->
+    <div id="absent-reason-wrap" class="form-group ${curOutcome==='3'?'':'hidden'}">
+      <label class="form-label">未出席原因 <span class="req">*</span></label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px" id="absent-reason-grid">
+        ${ABSENT_REASONS.map(r => `
+          <label style="display:flex;align-items:center;gap:8px;padding:9px 12px;border:1.5px solid var(--gray-100);border-radius:var(--radius-md);cursor:pointer;font-family:var(--font-zh);font-size:.85rem;background:var(--white)"
+                 class="absent-label ${curAbsentReason===r?'outcome-selected':''}">
+            <input type="radio" name="absentReason" value="${r}" ${curAbsentReason===r?'checked':''}
+                   style="width:14px;height:14px;accent-color:#7DCDF4;flex-shrink:0">
+            ${r}
+          </label>`).join('')}
+      </div>
+      <div class="form-group mt-8" id="absent-followup-wrap">
+        <label class="form-label">後續處理方式</label>
+        <select id="absent-followup" class="form-control">
+          <option value="">請選擇</option>
+          <option value="已聯繫，重新安排時間" ${rec.absentFollowup==='已聯繫，重新安排時間'?'selected':''}>已聯繫，重新安排時間</option>
+          <option value="已聯繫，家長表示不需要" ${rec.absentFollowup==='已聯繫，家長表示不需要'?'selected':''}>已聯繫，家長表示不需要</option>
+          <option value="多次聯繫未接通" ${rec.absentFollowup==='多次聯繫未接通'?'selected':''}>多次聯繫未接通</option>
+          <option value="等待家長回覆" ${rec.absentFollowup==='等待家長回覆'?'selected':''}>等待家長回覆</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 其他說明（選項5時出現）-->
+    <div id="other-note-wrap" class="form-group ${curOutcome==='5'?'':'hidden'}">
       <label class="form-label">其他說明 <span class="req">*</span></label>
-      <textarea id="rec-other-note" class="form-control" rows="3" placeholder="請填寫詳細說明...">${rec.otherNote || ''}</textarea>
+      <textarea id="rec-other-note" class="form-control" rows="3" placeholder="請填寫詳細說明...">${curOtherNote}</textarea>
     </div>
 
     <div id="rec-save-error" class="form-error hidden"></div>
@@ -1460,58 +1668,74 @@ function openRecordModal(container, user, bookingId) {
       <button class="btn btn-primary" id="rec-save">${icon('check','icon')} 儲存紀錄</button>
     </div>`;
 
-  // ── 樣式：選中高亮 ──────────────────────────────────────────────────────
-  const style = document.createElement('style');
-  style.id = 'outcome-style';
-  if (!document.getElementById('outcome-style')) document.head.appendChild(style);
+  // ── 樣式 ──────────────────────────────────────────────────────────────────
+  let style = document.getElementById('outcome-style');
+  if (!style) { style = document.createElement('style'); style.id='outcome-style'; document.head.appendChild(style); }
   style.textContent = `.outcome-selected { border-color:#7DCDF4 !important; background:#edf8fe !important; }`;
 
-  // ── 選項互動 ─────────────────────────────────────────────────────────────
+  // ── 選項互動 ──────────────────────────────────────────────────────────────
   container.querySelectorAll('.outcome-label').forEach(lbl => {
     lbl.addEventListener('click', () => {
       container.querySelectorAll('.outcome-label').forEach(l => l.classList.remove('outcome-selected'));
       lbl.classList.add('outcome-selected');
       const val = lbl.dataset.val;
-      const wrap = container.querySelector('#other-note-wrap');
-      if (val === '5') {
-        wrap.classList.remove('hidden');
-        container.querySelector('#rec-other-note').focus();
-      } else {
-        wrap.classList.add('hidden');
-      }
+      container.querySelector('#absent-reason-wrap').classList.toggle('hidden', val !== '3');
+      container.querySelector('#other-note-wrap').classList.toggle('hidden', val !== '5');
+      if (val === '5') container.querySelector('#rec-other-note').focus();
+    });
+  });
+
+  // 未出席原因選中高亮
+  container.querySelectorAll('.absent-label').forEach(lbl => {
+    lbl.addEventListener('click', () => {
+      container.querySelectorAll('.absent-label').forEach(l => l.classList.remove('outcome-selected'));
+      lbl.classList.add('outcome-selected');
     });
   });
 
   container.querySelector('#rec-cancel').addEventListener('click', () => modal.classList.add('hidden'));
 
   container.querySelector('#rec-save').addEventListener('click', async () => {
-    const errEl   = container.querySelector('#rec-save-error');
+    const errEl    = container.querySelector('#rec-save-error');
     const selected = container.querySelector('input[name="outcome"]:checked');
     if (!selected) {
       errEl.textContent = '請選擇一個後續狀況';
-      errEl.classList.remove('hidden');
-      return;
+      errEl.classList.remove('hidden'); return;
     }
     const outcome = selected.value;
+
+    // 驗證未出席原因
+    let absentReason = '', absentFollowup = '';
+    if (outcome === '3') {
+      const ar = container.querySelector('input[name="absentReason"]:checked');
+      if (!ar) {
+        errEl.textContent = '請選擇未出席原因';
+        errEl.classList.remove('hidden'); return;
+      }
+      absentReason  = ar.value;
+      absentFollowup = container.querySelector('#absent-followup')?.value || '';
+    }
+
+    // 驗證其他說明
     const otherNote = container.querySelector('#rec-other-note')?.value.trim() || '';
     if (outcome === '5' && !otherNote) {
       errEl.textContent = '請填寫其他說明';
-      errEl.classList.remove('hidden');
-      return;
+      errEl.classList.remove('hidden'); return;
     }
     errEl.classList.add('hidden');
 
-    recordsDB.upsert({
+    await recordsDB.upsert({
       bookingId,
       outcome,
+      absentReason,
+      absentFollowup,
       otherNote: outcome === '5' ? otherNote : '',
       savedAt:   new Date().toISOString(),
       teacherId: user.id,
     });
 
-    // 更新 booking 狀態
-    const statusByOutcome = { '1':'done', '2':'done', '3':'done', '4':'cancelled', '5':'done' };
-    bookingsDB.update(bookingId, { status: statusByOutcome[outcome] });
+    const statusByOutcome = { '1':'done','2':'done','3':'done','4':'cancelled','5':'done' };
+    await bookingsDB.update(bookingId, { status: statusByOutcome[outcome] });
 
     modal.classList.add('hidden');
     renderBookingsTable(container, user);
@@ -1542,7 +1766,7 @@ function exportRegionReport(region, cls, allBookings, allRecords) {
   GRADES.forEach(g => { GRADE_MAP[g.id] = g.label; });
 
   // ── 工作表1：預約明細 ──────────────────────────────────────────────────
-  const headers1 = ['教室名稱','營業所','家長姓名','學生姓名','學年','科目','預約日期','預約時間','聯絡電話','後續狀況','其他說明','建立時間'];
+  const headers1 = ['教室名稱','營業所','家長姓名','學生姓名','學年','科目','預約日期','預約時間','聯絡電話','後續狀況','未出席原因','後續處理','其他說明','建立時間'];
   const rows1 = allBookings.map(b => {
     const slot = slotsDB.all().find(s => s.id === (b.slotId||b.slot_id));
     const c2   = classroomsDB.get(b.classroomId||b.classroom_id);
@@ -1556,6 +1780,8 @@ function exportRegionReport(region, cls, allBookings, allRecords) {
       slot?.date||'', slot?.time||'',
       b.phone||'',
       OUTCOME_LABEL[rec?.outcome]||'待填寫',
+      rec?.absentReason||rec?.absent_reason||'',
+      rec?.absentFollowup||rec?.absent_followup||'',
       rec?.otherNote||rec?.other_note||'',
       (b.createdAt||b.created_at||'').slice(0,10),
     ];
@@ -1986,6 +2212,123 @@ function openClsModal(container, cid) {
 }
 
 // ── 管理員：帳號管理 ───────────────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════════════
+// 管理員：系統設定
+// ══════════════════════════════════════════════════════════════════════════
+
+// 設定存在 Supabase 的 classrooms 旁邊，用一個特殊 key 存
+const SETTINGS_KEY = 'ld_system_settings';
+
+function getSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    const defaults = { bookingWindowDays: 60, minHoursAhead: 24 };
+    return raw ? { ...defaults, ...JSON.parse(raw) } : defaults;
+  } catch { return { bookingWindowDays: 60, minHoursAhead: 24 }; }
+}
+
+function saveSettings(settings) {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+function renderAdminSettings(container) {
+  const s = getSettings();
+  container.innerHTML = `
+<div class="page-header">
+  <div class="page-title">系統設定</div>
+  <div class="page-subtitle">控制家長可預約的時間範圍</div>
+</div>
+
+<div class="card">
+  <div class="card-title">預約時間範圍設定</div>
+  <div class="grid-2" style="margin-bottom:20px">
+    <div class="form-group">
+      <label class="form-label">家長最多可預約幾天後的時段 <span class="req">*</span></label>
+      <div class="flex items-center gap-10">
+        <input id="setting-window" type="number" min="1" max="365" class="form-control" value="${s.bookingWindowDays}" style="max-width:120px">
+        <span class="text-zh text-muted">天以內</span>
+      </div>
+      <div class="form-hint">例如設 60，家長今天只能預約 60 天內的時段</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">最少需提前幾小時預約 <span class="req">*</span></label>
+      <div class="flex items-center gap-10">
+        <input id="setting-minhours" type="number" min="0" max="168" class="form-control" value="${s.minHoursAhead}" style="max-width:120px">
+        <span class="text-zh text-muted">小時前</span>
+      </div>
+      <div class="form-hint">例如設 24，家長必須在診斷時間 24 小時前完成預約</div>
+    </div>
+  </div>
+
+  <div id="settings-preview" style="background:var(--green-50);border:1px solid var(--green-200);border-radius:var(--radius-md);padding:14px 16px;margin-bottom:16px;font-family:var(--font-zh);font-size:.875rem;line-height:2">
+  </div>
+
+  <div id="settings-error" class="form-error hidden"></div>
+  <button class="btn btn-primary" id="btn-save-settings">
+    ${icon('check','icon')} 儲存設定
+  </button>
+</div>
+
+<div class="card">
+  <div class="card-title">目前設定說明</div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>設定項目</th><th>目前值</th><th>效果說明</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="fw-600 text-zh">預約時間窗口</td>
+          <td><span class="badge badge-blue">${s.bookingWindowDays} 天</span></td>
+          <td class="text-zh">家長最遠可預約 ${new Date(Date.now()+s.bookingWindowDays*86400000).toLocaleDateString('zh-TW')} 之前的時段</td>
+        </tr>
+        <tr>
+          <td class="fw-600 text-zh">最短提前時間</td>
+          <td><span class="badge badge-blue">${s.minHoursAhead} 小時</span></td>
+          <td class="text-zh">距離診斷時間不足 ${s.minHoursAhead} 小時的時段，家長無法預約</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>`;
+
+  // Live preview
+  function updatePreview() {
+    const days  = parseInt(container.querySelector('#setting-window').value) || 60;
+    const hours = parseInt(container.querySelector('#setting-minhours').value) || 24;
+    const today = new Date();
+    const maxDate = new Date(today.getTime() + days * 86400000);
+    const minDate = new Date(today.getTime() + hours * 3600000);
+    container.querySelector('#settings-preview').innerHTML = `
+      📅 家長今天可預約的時段範圍：<br>
+      &nbsp;&nbsp;最早：<strong>${minDate.toLocaleDateString('zh-TW')} ${minDate.getHours().toString().padStart(2,'0')}:${minDate.getMinutes().toString().padStart(2,'0')} 以後</strong><br>
+      &nbsp;&nbsp;最晚：<strong>${maxDate.toLocaleDateString('zh-TW')} 以前</strong>`;
+  }
+
+  container.querySelector('#setting-window').addEventListener('input', updatePreview);
+  container.querySelector('#setting-minhours').addEventListener('input', updatePreview);
+  updatePreview();
+
+  container.querySelector('#btn-save-settings').addEventListener('click', () => {
+    const days  = parseInt(container.querySelector('#setting-window').value);
+    const hours = parseInt(container.querySelector('#setting-minhours').value);
+    const errEl = container.querySelector('#settings-error');
+
+    if (!days || days < 1 || days > 365) {
+      errEl.textContent = '預約窗口請設定 1–365 天';
+      errEl.classList.remove('hidden'); return;
+    }
+    if (hours < 0 || hours > 168) {
+      errEl.textContent = '最短提前時間請設定 0–168 小時';
+      errEl.classList.remove('hidden'); return;
+    }
+    errEl.classList.add('hidden');
+    saveSettings({ bookingWindowDays: days, minHoursAhead: hours });
+    showToast('設定已儲存', 'success');
+    // Re-render to update table
+    renderAdminSettings(container);
+  });
+}
+
 function renderAdminAccounts(container) {
   container.innerHTML = buildAccountPage();
   bindAccountEvents(container);
@@ -2228,6 +2571,7 @@ function mountApp() {
         { id: 'admin-overview',   label: '數據總覽',   ic: 'chart-bar' },
         { id: 'admin-classrooms', label: '教室管理',   ic: 'office' },
         { id: 'admin-accounts',   label: '帳號管理',   ic: 'shield' },
+        { id: 'admin-settings',   label: '系統設定',   ic: 'clock' },
       ]
     : [
         { id: 'teacher-slots',    label: '時段管理',   ic: 'calendar' },
@@ -2287,6 +2631,7 @@ function renderPage(pageId, container) {
     case 'admin-overview':   renderAdminOverview(container); break;
     case 'admin-classrooms': renderAdminClassrooms(container); break;
     case 'admin-accounts':   renderAdminAccounts(container); break;
+    case 'admin-settings':   renderAdminSettings(container); break;
     case 'teacher-slots':    renderTeacherSlots(container, currentUser); break;
     case 'teacher-bookings': renderTeacherBookings(container, currentUser); break;
   }
