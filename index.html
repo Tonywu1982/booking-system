@@ -744,6 +744,31 @@ function buildActiveHierarchy() {
   return sorted;
 }
 
+
+// ── 手機號碼格式化與驗證 ─────────────────────────────────────────────────
+function formatPhoneInput(input) {
+  // 只保留數字
+  let digits = input.value.replace(/\D/g, '').slice(0, 10);
+  // 自動加 dash：09xx-xxx-xxx
+  let formatted = digits;
+  if (digits.length > 4 && digits.length <= 7) {
+    formatted = digits.slice(0,4) + '-' + digits.slice(4);
+  } else if (digits.length > 7) {
+    formatted = digits.slice(0,4) + '-' + digits.slice(4,7) + '-' + digits.slice(7);
+  }
+  input.value = formatted;
+}
+
+function isValidPhone(val) {
+  // 允許 09xx-xxx-xxx 或 0900000000（10碼純數字）
+  const digits = val.replace(/\D/g,'');
+  return digits.length === 10 && digits.startsWith('09');
+}
+
+function getRawPhone(val) {
+  return val.replace(/\D/g,'');
+}
+
 function buildActiveCityOptions() {
   const hier = buildActiveHierarchy();
   return Object.keys(hier).map(c => `<option value="${c}">${c}</option>`).join('');
@@ -787,9 +812,9 @@ function buildParentPage() {
         </div>
 
         <div class="form-group">
-          <label class="form-label">聯絡電話 <span class="req">*</span></label>
+          <label class="form-label">手機號碼 <span class="req">*</span></label>
           <div style="display:flex;gap:8px;align-items:center">
-            <input id="p-phone" class="form-control" type="tel" placeholder="09xx-xxxxxx" style="flex:1" autocomplete="tel">
+            <input id="p-phone" class="form-control" type="tel" placeholder="09xx-xxx-xxx" style="flex:1" autocomplete="tel" maxlength="12" id="p-phone" inputmode="numeric">
             <button type="button" id="btn-otp" class="btn btn-sm" style="white-space:nowrap;flex-shrink:0;font-size:.8rem">傳送驗證碼</button>
           </div>
           <div style="font-size:.72rem;color:var(--gray-500);margin-top:4px;font-family:var(--font-zh)">📌 OTP 驗證功能規劃中，串接簡訊商後啟用</div>
@@ -904,7 +929,7 @@ function buildParentPage() {
     <div class="card" style="margin-top:16px">
       <div class="card-title">查詢我的預約紀錄</div>
       <div style="display:flex;gap:8px">
-        <input id="query-phone" class="form-control" type="tel" placeholder="輸入聯絡電話查詢">
+        <input id="query-phone" class="form-control" type="tel" placeholder="輸入手機號碼查詢（09xx-xxx-xxx）" maxlength="12" inputmode="numeric">
         <button class="btn btn-primary" id="btn-query" style="white-space:nowrap;flex-shrink:0">查詢</button>
       </div>
       <div id="query-result" style="margin-top:12px"></div>
@@ -921,9 +946,17 @@ function bindParentEvents(container) {
   step1Data = {};
 
   // Step 1 → Step 2
+  // 手機號碼格式化
+  const phoneInput = container.querySelector('#p-phone');
+  if (phoneInput) {
+    phoneInput.addEventListener('input', () => formatPhoneInput(phoneInput));
+    phoneInput.addEventListener('keypress', e => { if (!/[\d]/.test(e.key)) e.preventDefault(); });
+  }
+
   container.querySelector('#btn-otp').addEventListener('click', () => {
     const phone = container.querySelector('#p-phone').value.trim();
     if (!phone) { alert('請先填寫手機號碼'); return; }
+    if (!isValidPhone(phone)) { alert('請輸入正確的手機號碼格式（09xx-xxx-xxx）'); return; }
     alert('【功能規劃中】實際上線後將發送 OTP 驗證碼至 ' + phone);
   });
   // 縣市 → 地區聯動
@@ -973,8 +1006,8 @@ function bindParentEvents(container) {
       errEl.classList.remove('hidden');
       return;
     }
-    if (!phone) {
-      errEl.textContent = '請填寫聯絡電話';
+    if (!phone || !isValidPhone(phone)) {
+      errEl.textContent = '請輸入正確的手機號碼（09xx-xxx-xxx，共10碼）';
       errEl.classList.remove('hidden');
       return;
     }
@@ -984,7 +1017,7 @@ function bindParentEvents(container) {
       return;
     }
     errEl.classList.add('hidden');
-    step1Data = { name, parentName, phone, gradeId: Number(gradeId), subject, classroomId: cid, note };
+    step1Data = { name, parentName, phone: getRawPhone(phone), gradeId: Number(gradeId), subject, classroomId: cid, note };
 
     renderSlotPicker(container, cid);
     goToStep(container, 2);
@@ -1021,9 +1054,21 @@ function bindParentEvents(container) {
   });
 
   // Query bookings
+  const queryPhoneInput = container.querySelector('#query-phone');
+  if (queryPhoneInput) {
+    queryPhoneInput.addEventListener('input', () => formatPhoneInput(queryPhoneInput));
+    queryPhoneInput.addEventListener('keypress', e => { if (!/[\d]/.test(e.key)) e.preventDefault(); });
+  }
+
   container.querySelector('#btn-query').addEventListener('click', () => {
     const phone = container.querySelector('#query-phone').value.trim();
-    renderQueryResult(container, phone);
+    if (phone && !isValidPhone(phone)) {
+      container.querySelector('#query-result').innerHTML =
+        '<div class="form-error">請輸入正確的手機號碼格式（09xx-xxx-xxx）</div>';
+      return;
+    }
+    // 用純數字查詢，確保與存入時一致
+    renderQueryResult(container, getRawPhone(phone));
   });
   container.querySelector('#query-phone').addEventListener('keydown', e => {
     if (e.key === 'Enter') container.querySelector('#btn-query').click();
@@ -1135,11 +1180,12 @@ async function confirmBooking(container) {
     <div>📅 日期：${dateStr}</div>
     <div>⏰ 時間：${timeStr}</div>
     <div>👤 家長姓名：${step1Data.parentName}</div>
-    <div>📞 聯絡電話：${step1Data.phone}</div>
+    <div>📞 手機號碼：${step1Data.phone.replace(/(\d{4})(\d{3})(\d{3})/, '$1-$2-$3')}</div>
     ${step1Data.note ? `<div>📝 備註：${step1Data.note}</div>` : ''}
   `;
 
   // LINE 訊息預覽
+  const fmtPhone = step1Data.phone.replace(/(\d{4})(\d{3})(\d{3})/, '$1-$2-$3');
   const lineMsg = `${step1Data.parentName} 家長您好，${step1Data.name} 同學已預約學力診斷。
 📅 ${dateStr} ${timeStr}
 🏫 ${clsName}
