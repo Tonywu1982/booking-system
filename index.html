@@ -2591,8 +2591,33 @@ function openClsModal(container, cid) {
         <input id="edit-cls-phone" class="form-control" value="${cls.phone || ''}" placeholder="0x-xxxx-xxxx">
       </div>
       <div id="cls-edit-error" class="form-error hidden"></div>
-      <div class="text-right">
+      <div class="flex justify-between items-center" style="flex-wrap:wrap;gap:8px">
         <button class="btn btn-primary" id="btn-save-cls">儲存教室資料</button>
+        <button class="btn btn-sm" id="btn-show-transfer" style="color:var(--amber-700);border-color:var(--amber-600)">
+          🔄 教室承接（換負責人）
+        </button>
+      </div>
+
+      <!-- 教室承接區塊（預設隱藏）-->
+      <div id="transfer-wrap" class="hidden" style="margin-top:16px;background:var(--amber-50);border:1px solid var(--amber-100);border-radius:var(--radius-md);padding:16px">
+        <div style="font-weight:700;font-family:var(--font-zh);font-size:.875rem;margin-bottom:8px;color:var(--amber-700)">
+          🔄 教室承接設定
+        </div>
+        <p style="font-size:.825rem;font-family:var(--font-zh);color:var(--gray-700);margin-bottom:12px;line-height:1.7">
+          換負責人後教室編號改變時，使用此功能將所有預約、時段、帳號資料遷移到新編號，並停用舊教室。
+        </p>
+        <div class="form-group">
+          <label class="form-label">新教室編號 <span class="req">*</span></label>
+          <input id="transfer-new-id" class="form-control" placeholder="如：fc-10054-02" style="max-width:240px">
+          <div class="form-hint">新負責人的教室編號，需先在系統中新增此教室</div>
+        </div>
+        <div id="transfer-error" class="form-error hidden"></div>
+        <div class="flex gap-8">
+          <button class="btn btn-sm btn-primary" id="btn-do-transfer" style="background:var(--amber-600);border-color:var(--amber-600)">
+            確認承接
+          </button>
+          <button class="btn btn-sm" id="btn-cancel-transfer">取消</button>
+        </div>
       </div>
     </div>
 
@@ -2634,10 +2659,75 @@ function openClsModal(container, cid) {
     const err   = container.querySelector('#cls-edit-error');
     if (!name) { err.textContent = '教室名稱不可為空'; err.classList.remove('hidden'); return; }
     err.classList.add('hidden');
-    classroomsDB.update(cid, { name, address: addr, phone });
+    await classroomsDB.update(cid, { name, address: addr, phone });
     container.querySelector('#cls-modal-title').textContent = name;
     showToast('教室資料已儲存', 'success');
-    renderClassroomsTable(container, '');
+    renderClassroomsTable(container, '', '', '');
+  });
+
+  // 承接按鈕顯示/隱藏
+  container.querySelector('#btn-show-transfer').addEventListener('click', () => {
+    container.querySelector('#transfer-wrap').classList.remove('hidden');
+    container.querySelector('#btn-show-transfer').classList.add('hidden');
+  });
+  container.querySelector('#btn-cancel-transfer').addEventListener('click', () => {
+    container.querySelector('#transfer-wrap').classList.add('hidden');
+    container.querySelector('#btn-show-transfer').classList.remove('hidden');
+    container.querySelector('#transfer-new-id').value = '';
+    container.querySelector('#transfer-error').classList.add('hidden');
+  });
+
+  // 確認承接
+  container.querySelector('#btn-do-transfer').addEventListener('click', async () => {
+    const newId  = container.querySelector('#transfer-new-id').value.trim();
+    const errEl  = container.querySelector('#transfer-error');
+
+    if (!newId) { errEl.textContent='請輸入新教室編號'; errEl.classList.remove('hidden'); return; }
+    if (newId === cid) { errEl.textContent='新舊教室編號相同'; errEl.classList.remove('hidden'); return; }
+
+    const newCls = classroomsDB.get(newId);
+    if (!newCls) { errEl.textContent=`找不到教室編號「${newId}」，請先在教室管理中新增此教室`; errEl.classList.remove('hidden'); return; }
+
+    if (!confirm(`確定要將「${cls.name}」的所有資料承接到「${newCls.name}」（${newId}）？\n\n此操作將：\n• 把所有預約、時段遷移到新教室編號\n• 把教師帳號改為新教室\n• 停用舊教室\n\n此操作無法復原！`)) return;
+
+    errEl.classList.add('hidden');
+
+    try {
+      showGlobalLoading(true);
+
+      // 1. 把舊教室的 slots 改到新教室
+      const oldSlots = slotsDB.all().filter(s => (s.classroomId||s.classroom_id) === cid);
+      for (const s of oldSlots) {
+        await supaFetch('PATCH','slots',{ classroom_id: newId },{ id: `eq.${s.id}` });
+        _cache.slots = _cache.slots.map(sl => sl.id===s.id ? {...sl, classroomId:newId, classroom_id:newId} : sl);
+      }
+
+      // 2. 把舊教室的 bookings 改到新教室
+      const oldBookings = bookingsDB.all().filter(b => (b.classroomId||b.classroom_id) === cid);
+      for (const b of oldBookings) {
+        await supaFetch('PATCH','bookings',{ classroom_id: newId },{ id: `eq.${b.id}` });
+        _cache.bookings = _cache.bookings.map(bk => bk.id===b.id ? {...bk, classroomId:newId, classroom_id:newId} : bk);
+      }
+
+      // 3. 把教師帳號改到新教室
+      const teachers = accountsDB.all().filter(a => (a.classroomId||a.classroom_id) === cid && a.role==='teacher');
+      for (const t of teachers) {
+        await accountsDB.update(t.id, { classroomId: newId });
+      }
+
+      // 4. 停用舊教室
+      await classroomsDB.update(cid, { active: false });
+
+      showGlobalLoading(false);
+      container.querySelector('#cls-modal').classList.add('hidden');
+      renderClassroomsTable(container, '', '', '');
+      showToast(`教室承接完成！${oldSlots.length} 筆時段、${oldBookings.length} 筆預約已遷移`, 'success');
+
+    } catch(e) {
+      showGlobalLoading(false);
+      errEl.textContent = '承接失敗：' + e.message;
+      errEl.classList.remove('hidden');
+    }
   });
 
   // Add new teacher
