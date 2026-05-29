@@ -400,7 +400,7 @@ const classroomsDB = {
 const accountsDB = {
   all:    ()          => _cache.accounts || [],
   get:    id          => (_cache.accounts||[]).find(a => a.id === id) || null,
-  login:  (u, p)      => (_cache.accounts||[]).find(a => a.username===u && a.password===p && a.active) || null,
+  login:  (u, p)      => (_cache.accounts||[]).find(a => a.username===u && a.password===p && (a.active===true||a.active==='true')) || null,
   add:    async acc   => {
     const rows = await DB.upsertAccount({ ...acc, classroom_id: acc.classroomId });
     const saved = Array.isArray(rows) ? rows[0] : rows;
@@ -629,7 +629,7 @@ function renderLogin(onLogin) {
     if (!user) {
       try {
         const rows = await supaFetch('GET', 'accounts', null, {
-          username: `eq.${u}`, password: `eq.${p}`, active: 'eq.true', limit: '1'
+          username: `eq.${u}`, password: `eq.${p}`, active: 'is.true', limit: '1'
         });
         if (rows && rows.length > 0) {
           user = normalizeAccount(rows[0]);
