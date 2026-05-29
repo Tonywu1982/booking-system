@@ -237,17 +237,30 @@ const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 
 async function supaFetch(method, table, body, params) {
   const url = new URL(`${SUPA_URL}/rest/v1/${table}`);
-  if (params) Object.entries(params).forEach(([k,v]) => url.searchParams.set(k,v));
   const headers = {
     'apikey': SUPA_KEY,
     'Authorization': `Bearer ${SUPA_KEY}`,
     'Content-Type': 'application/json',
-    'Prefer': method === 'POST' ? 'return=representation' : 'return=representation',
   };
+  // Handle params: query string for GET/DELETE/PATCH, on_conflict for POST upsert
+  if (params) {
+    Object.entries(params).forEach(([k, v]) => {
+      if (k === 'on_conflict') {
+        headers['Prefer'] = `resolution=merge-duplicates,return=representation`;
+        url.searchParams.set('on_conflict', v);
+      } else {
+        url.searchParams.set(k, v);
+      }
+    });
+  }
+  if (!headers['Prefer']) {
+    if (method === 'POST' || method === 'PATCH') headers['Prefer'] = 'return=representation';
+  }
   const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`Supabase ${method} ${table}: ${err}`);
+    console.error(`Supabase ${method} ${table} error:`, err);
+    throw new Error(`Supabase ${method} ${table}: ${res.status} ${err.slice(0,200)}`);
   }
   const text = await res.text();
   return text ? JSON.parse(text) : [];
@@ -344,15 +357,12 @@ let _cache = { classrooms: null, accounts: null, slots: null, bookings: null, re
 async function loadAll() {
   showGlobalLoading(true);
   try {
-    const [cls, acc, sl, bk, rc] = await Promise.all([
-      DB.allClassrooms(), DB.allAccounts(),
-      DB.allSlots(), DB.allBookings(), DB.allRecords()
-    ]);
-    _cache.classrooms = cls;
-    _cache.accounts   = acc;
-    _cache.slots      = sl;
-    _cache.bookings   = bk;
-    _cache.records    = rc;
+    // Load sequentially to avoid overwhelming free tier
+    _cache.classrooms = await DB.allClassrooms();
+    _cache.accounts   = await DB.allAccounts();
+    _cache.slots      = await DB.allSlots();
+    _cache.bookings   = await DB.allBookings();
+    _cache.records    = await DB.allRecords();
   } catch(e) {
     console.error('loadAll error', e);
     showGlobalLoading(false);
@@ -512,15 +522,20 @@ async function initData() {
     // 如果教室資料是空的，種入初始資料
     if (_cache.classrooms.length === 0) {
       showGlobalLoading(true);
-      // 批次 upsert 教室
-      await supaFetch('POST','classrooms',DEFAULT_CLASSROOMS,{on_conflict:'id'});
-      // 批次 upsert 帳號
+      // 批次 insert 教室（分批避免超時）
+      const CLS = DEFAULT_CLASSROOMS;
+      for (let i = 0; i < CLS.length; i += 20) {
+        await supaFetch('POST','classrooms',CLS.slice(i,i+20),{on_conflict:'id'});
+      }
+      // 批次 insert 帳號（分批）
       const accRows = DEFAULT_ACCOUNTS.map(a => ({
         id: a.id, name: a.name, role: a.role,
         classroom_id: a.classroomId || null,
         username: a.username, password: a.password, active: a.active
       }));
-      await supaFetch('POST','accounts',accRows,{on_conflict:'id'});
+      for (let i = 0; i < accRows.length; i += 20) {
+        await supaFetch('POST','accounts',accRows.slice(i,i+20),{on_conflict:'id'});
+      }
       await loadAll();
     }
     // normalize cache
@@ -530,7 +545,8 @@ async function initData() {
     _cache.accounts = (_cache.accounts||[]).map(normalizeAccount);
   } catch(e) {
     console.error('initData error', e);
-    alert('無法連線至資料庫，請確認網路連線後重新整理頁面。');
+    console.error('DB init failed:', e);
+    document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f6fb;padding:20px"><div style="background:#fff;border-radius:16px;padding:32px;max-width:400px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.1)"><div style="font-size:2rem;margin-bottom:12px">⚠️</div><div style="font-size:1rem;font-weight:700;margin-bottom:8px;font-family:var(--font-zh)">資料庫連線失敗</div><div style="font-size:.85rem;color:#888;margin-bottom:16px;font-family:var(--font-zh)">錯誤：${e.message}</div><button onclick="location.reload()" style="background:#1E1E1E;color:#fff;border:none;border-radius:8px;padding:10px 24px;cursor:pointer;font-family:var(--font-zh)">重新整理</button></div></div>`;
   }
 }
 
