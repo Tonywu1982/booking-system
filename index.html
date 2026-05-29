@@ -4,12 +4,1578 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>學力診斷預約系統</title>
-  <link rel="stylesheet" href="src/style.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+/* ── Reset & Base ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --green-900: #04342c; --green-800: #085041; --green-700: #0f6e56;
+  --green-600: #1d9e75; --green-400: #5dcaa5; --green-200: #9fe1cb;
+  --green-100: #c5eedd; --green-50: #e1f5ee;
+  --amber-900: #412402; --amber-700: #854f0b; --amber-600: #ba7517;
+  --amber-400: #ef9f27; --amber-100: #fac775; --amber-50: #faeeda;
+  --red-700: #a32d2d; --red-50: #fcebeb;
+  --gray-800: #2c2c2a; --gray-700: #444441; --gray-500: #888780;
+  --gray-200: #d3d1c7; --gray-100: #e8e6df; --gray-50: #f5f4f0;
+  --blue-800: #0c447c; --blue-100: #b5d4f4; --blue-50: #e6f1fb;
+  --white: #ffffff;
+  --radius-sm: 6px; --radius-md: 10px; --radius-lg: 14px; --radius-xl: 20px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
+  --shadow-md: 0 4px 16px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.05);
+  --font-body: 'DM Sans','Noto Sans TC',sans-serif;
+  --font-zh: 'Noto Sans TC','DM Sans',sans-serif;
+  --transition: .15s ease;
+}
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+body { font-family: var(--font-body); background: var(--gray-50); color: var(--gray-800); min-height: 100vh; line-height: 1.6; }
+h1 { font-size: 1.5rem; font-weight: 700; }
+h2 { font-size: 1.2rem; font-weight: 600; }
+h3 { font-size: 1rem; font-weight: 600; }
+p { font-family: var(--font-zh); font-size: .9375rem; }
+.app-shell { display: flex; flex-direction: column; min-height: 100vh; }
+.topbar { position: sticky; top: 0; z-index: 100; height: 56px; background: var(--green-800); display: flex; align-items: center; gap: 12px; padding: 0 20px; box-shadow: 0 2px 8px rgba(4,52,44,.25); }
+.topbar-logo { display: flex; align-items: center; gap: 8px; font-family: var(--font-zh); font-size: .95rem; font-weight: 700; color: var(--white); letter-spacing: .03em; white-space: nowrap; }
+.topbar-logo svg { width: 22px; height: 22px; flex-shrink: 0; }
+.topbar-spacer { flex: 1; }
+.topbar-user { display: flex; align-items: center; gap: 8px; font-size: .825rem; color: rgba(255,255,255,.85); font-family: var(--font-zh); }
+.topbar-user .avatar { width: 30px; height: 30px; border-radius: 50%; background: rgba(255,255,255,.2); display: flex; align-items: center; justify-content: center; font-size: .75rem; font-weight: 700; color: #fff; }
+.btn-logout { background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2); color: #fff; border-radius: var(--radius-sm); padding: 4px 10px; font-size: .8rem; cursor: pointer; transition: var(--transition); }
+.btn-logout:hover { background: rgba(255,255,255,.22); }
+.layout { display: flex; flex: 1; }
+.sidebar { width: 210px; flex-shrink: 0; background: var(--white); border-right: 1px solid var(--gray-100); padding: 16px 0; position: sticky; top: 56px; height: calc(100vh - 56px); overflow-y: auto; }
+.sidebar-item { display: flex; align-items: center; gap: 10px; padding: 10px 20px; font-size: .875rem; cursor: pointer; color: var(--gray-700); font-family: var(--font-zh); border-left: 3px solid transparent; transition: var(--transition); }
+.sidebar-item:hover { background: var(--green-50); color: var(--green-800); }
+.sidebar-item.active { color: var(--green-700); background: var(--green-50); border-left-color: var(--green-600); font-weight: 600; }
+.sidebar-item .icon { width: 18px; height: 18px; flex-shrink: 0; }
+.main-content { flex: 1; padding: 28px; overflow-y: auto; max-width: 1100px; }
+.card { background: var(--white); border-radius: var(--radius-lg); border: 1px solid var(--gray-100); padding: 20px 24px; margin-bottom: 16px; box-shadow: var(--shadow-sm); }
+.card-title { font-size: .9rem; font-weight: 700; color: var(--gray-800); margin-bottom: 14px; font-family: var(--font-zh); padding-bottom: 10px; border-bottom: 1px solid var(--gray-100); }
+.page-header { margin-bottom: 20px; }
+.page-title { font-size: 1.3rem; font-weight: 700; color: var(--gray-800); font-family: var(--font-zh); }
+.page-subtitle { font-size: .875rem; color: var(--gray-500); margin-top: 2px; font-family: var(--font-zh); }
+.btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--gray-200); background: var(--white); border-radius: var(--radius-sm); padding: 8px 16px; font-size: .875rem; cursor: pointer; transition: var(--transition); color: var(--gray-800); font-family: var(--font-zh); font-weight: 500; white-space: nowrap; }
+.btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+.btn:hover { background: var(--gray-50); border-color: var(--gray-500); }
+.btn:active { transform: scale(.97); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-primary { background: var(--green-700); border-color: var(--green-700); color: #fff; }
+.btn-primary:hover { background: var(--green-800); border-color: var(--green-800); }
+.btn-danger { color: var(--red-700); border-color: var(--red-700); }
+.btn-danger:hover { background: var(--red-50); }
+.btn-sm { padding: 5px 10px; font-size: .8rem; }
+.btn-block { width: 100%; justify-content: center; }
+.badge { display: inline-block; font-size: .725rem; font-weight: 700; padding: 2px 8px; border-radius: 20px; white-space: nowrap; font-family: var(--font-zh); }
+.badge-green { background: var(--green-50); color: var(--green-800); }
+.badge-amber { background: var(--amber-50); color: var(--amber-700); }
+.badge-red { background: var(--red-50); color: var(--red-700); }
+.badge-gray { background: var(--gray-100); color: var(--gray-700); }
+.badge-blue { background: var(--blue-50); color: var(--blue-800); }
+.form-group { margin-bottom: 14px; }
+.form-label { display: block; font-size: .825rem; font-weight: 600; color: var(--gray-700); margin-bottom: 5px; font-family: var(--font-zh); }
+.form-label span.req { color: var(--red-700); margin-left: 2px; }
+.form-control { width: 100%; padding: 9px 12px; font-size: .875rem; border: 1px solid var(--gray-200); border-radius: var(--radius-sm); background: var(--white); color: var(--gray-800); transition: var(--transition); font-family: var(--font-zh); appearance: none; -webkit-appearance: none; }
+.form-control:focus { outline: none; border-color: var(--green-600); box-shadow: 0 0 0 3px rgba(29,158,117,.12); }
+textarea.form-control { resize: vertical; min-height: 80px; line-height: 1.6; }
+select.form-control { cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888780' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; }
+.form-hint { font-size: .775rem; color: var(--gray-500); margin-top: 4px; font-family: var(--font-zh); }
+.form-error { font-size: .775rem; color: var(--red-700); margin-top: 4px; font-family: var(--font-zh); }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+@media (max-width: 600px) { .form-row,.form-row-3 { grid-template-columns: 1fr; } }
+.table-wrap { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+.table th { text-align: left; padding: 10px 12px; font-size: .775rem; font-weight: 700; color: var(--gray-500); border-bottom: 1px solid var(--gray-100); background: var(--gray-50); font-family: var(--font-zh); white-space: nowrap; }
+.table td { padding: 11px 12px; border-bottom: 1px solid var(--gray-100); color: var(--gray-800); vertical-align: middle; font-family: var(--font-zh); }
+.table tr:last-child td { border-bottom: none; }
+.table tbody tr:hover td { background: var(--green-50); }
+.table-empty { text-align: center; padding: 40px 20px; color: var(--gray-500); font-family: var(--font-zh); font-size: .875rem; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap: 12px; margin-bottom: 20px; }
+.stat-card { background: var(--white); border: 1px solid var(--gray-100); border-radius: var(--radius-md); padding: 16px 18px; box-shadow: var(--shadow-sm); }
+.stat-label { font-size: .775rem; font-weight: 600; color: var(--gray-500); margin-bottom: 6px; font-family: var(--font-zh); }
+.stat-value { font-size: 1.75rem; font-weight: 700; color: var(--gray-800); line-height: 1; }
+.stat-value.green { color: var(--green-700); }
+.stat-value.amber { color: var(--amber-600); }
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; animation: fadeIn .15s ease; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.modal { background: var(--white); border-radius: var(--radius-xl); padding: 24px; width: 100%; max-width: 500px; box-shadow: var(--shadow-md); position: relative; animation: slideUp .2s ease; max-height: 90vh; overflow-y: auto; }
+.modal-lg { max-width: 640px; }
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.modal-title { font-size: 1.05rem; font-weight: 700; color: var(--gray-800); font-family: var(--font-zh); }
+.modal-close { background: none; border: none; cursor: pointer; color: var(--gray-500); padding: 4px; border-radius: var(--radius-sm); transition: var(--transition); line-height: 1; }
+.modal-close:hover { background: var(--gray-100); color: var(--gray-800); }
+.modal-close svg { width: 20px; height: 20px; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--gray-100); }
+.alert { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; border-radius: var(--radius-md); font-size: .875rem; margin-bottom: 16px; font-family: var(--font-zh); }
+.alert svg { width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; }
+.alert-success { background: var(--green-50); color: var(--green-800); border: 1px solid var(--green-200); }
+.alert-error { background: var(--red-50); color: var(--red-700); border: 1px solid #f09595; }
+.alert-info { background: var(--blue-50); color: var(--blue-800); border: 1px solid var(--blue-100); }
+.alert-amber { background: var(--amber-50); color: var(--amber-700); border: 1px solid var(--amber-100); }
+.toast-container { position: fixed; top: 70px; right: 20px; z-index: 2000; display: flex; flex-direction: column; gap: 8px; }
+.toast { background: var(--gray-800); color: #fff; border-radius: var(--radius-md); padding: 12px 18px; font-size: .875rem; font-family: var(--font-zh); box-shadow: var(--shadow-md); animation: slideIn .2s ease; max-width: 320px; }
+.toast.toast-success { background: var(--green-700); }
+.toast.toast-error { background: var(--red-700); }
+@keyframes slideIn { from { transform: translateX(40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.login-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg,var(--green-900) 0%,var(--green-700) 60%,var(--green-400) 100%); padding: 20px; }
+.login-card { background: var(--white); border-radius: var(--radius-xl); padding: 36px 36px 32px; width: 100%; max-width: 380px; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+.login-logo { text-align: center; margin-bottom: 24px; }
+.login-logo svg { width: 48px; height: 48px; color: var(--green-600); }
+.login-title { font-size: 1.3rem; font-weight: 700; color: var(--gray-800); text-align: center; margin-bottom: 4px; font-family: var(--font-zh); }
+.login-sub { font-size: .85rem; color: var(--gray-500); text-align: center; margin-bottom: 24px; font-family: var(--font-zh); }
+.slot-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
+@media (max-width: 500px) { .slot-grid { grid-template-columns: repeat(2,1fr); } }
+.slot-card { border: 1.5px solid var(--gray-100); border-radius: var(--radius-md); padding: 12px; text-align: center; cursor: pointer; transition: var(--transition); background: var(--white); }
+.slot-card:hover { border-color: var(--green-400); background: var(--green-50); }
+.slot-card.selected { border-color: var(--green-600); background: var(--green-50); box-shadow: 0 0 0 2px rgba(29,158,117,.2); }
+.slot-card.full { opacity: .45; cursor: not-allowed; background: var(--gray-50); }
+.slot-time { font-size: .9rem; font-weight: 700; color: var(--gray-800); }
+.slot-meta { font-size: .75rem; color: var(--gray-500); margin-top: 2px; font-family: var(--font-zh); }
+.slot-full-label { font-size: .7rem; color: var(--red-700); font-weight: 700; }
+.tab-bar { display: flex; gap: 4px; background: var(--gray-100); border-radius: var(--radius-md); padding: 4px; margin-bottom: 16px; }
+.tab { flex: 1; text-align: center; padding: 7px 12px; font-size: .85rem; font-weight: 600; cursor: pointer; border-radius: var(--radius-sm); transition: var(--transition); color: var(--gray-500); font-family: var(--font-zh); border: none; background: none; }
+.tab:hover { color: var(--gray-800); }
+.tab.active { background: var(--white); color: var(--green-700); box-shadow: var(--shadow-sm); }
+.progress { height: 8px; background: var(--gray-100); border-radius: 4px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 4px; background: var(--green-600); transition: width .4s ease; }
+.score-ring { width: 72px; height: 72px; border-radius: 50%; border: 4px solid var(--green-200); display: flex; align-items: center; justify-content: center; font-size: 1.3rem; font-weight: 700; color: var(--green-700); background: var(--green-50); margin: 0 auto 12px; }
+.avatar { width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: .8rem; font-weight: 700; flex-shrink: 0; }
+.av-green { background: var(--green-50); color: var(--green-800); }
+.av-amber { background: var(--amber-50); color: var(--amber-700); }
+.av-blue { background: var(--blue-50); color: var(--blue-800); }
+.flex { display: flex; } .flex-col { flex-direction: column; } .items-center { align-items: center; } .justify-between { justify-content: space-between; }
+.gap-8 { gap: 8px; } .gap-10 { gap: 10px; } .gap-12 { gap: 12px; } .gap-16 { gap: 16px; }
+.mt-8 { margin-top: 8px; } .mt-12 { margin-top: 12px; } .mt-16 { margin-top: 16px; } .mb-16 { margin-bottom: 16px; }
+.text-sm { font-size: .8rem; } .text-xs { font-size: .75rem; } .text-muted { color: var(--gray-500); } .text-right { text-align: right; }
+.text-zh { font-family: var(--font-zh); } .fw-600 { font-weight: 600; }
+.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0; }
+.hidden { display: none !important; } .w-full { width: 100%; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+@media (max-width: 700px) { .grid-2,.grid-3 { grid-template-columns: 1fr; } }
+.parent-layout { min-height: 100vh; background: var(--gray-50); }
+.parent-topbar { height: 56px; background: var(--green-800); display: flex; align-items: center; padding: 0 20px; gap: 10px; box-shadow: 0 2px 8px rgba(4,52,44,.25); }
+.parent-topbar-title { color: #fff; font-family: var(--font-zh); font-weight: 700; font-size: .95rem; }
+.parent-content { max-width: 760px; margin: 0 auto; padding: 24px 16px 60px; }
+.step-indicator { display: flex; align-items: center; gap: 8px; margin-bottom: 24px; }
+.step-dot { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .8rem; font-weight: 700; flex-shrink: 0; background: var(--gray-100); color: var(--gray-500); }
+.step-dot.done { background: var(--green-600); color: #fff; }
+.step-dot.active { background: var(--green-700); color: #fff; box-shadow: 0 0 0 3px rgba(29,158,117,.2); }
+.step-line { flex: 1; height: 2px; background: var(--gray-100); }
+.step-line.done { background: var(--green-400); }
+.bar-chart { display: flex; align-items: flex-end; gap: 8px; height: 100px; }
+.bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.bar { width: 100%; border-radius: 4px 4px 0 0; background: var(--green-400); }
+.bar-label { font-size: .7rem; color: var(--gray-500); font-family: var(--font-zh); text-align: center; }
+.bar-val { font-size: .7rem; font-weight: 700; color: var(--green-700); }
+.score-input-wrap { display: flex; align-items: center; gap: 12px; }
+.score-preview { width: 54px; height: 54px; border-radius: 50%; border: 3px solid var(--green-200); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: 700; color: var(--green-700); background: var(--green-50); }
+input[type=number].score-field { max-width: 100px; text-align: center; font-size: 1.1rem; font-weight: 700; }
+@media (max-width: 768px) { .sidebar { display: none; } .main-content { padding: 16px; } .card { padding: 14px 16px; } }
+  </style>
 </head>
 <body>
-  <div id="app"></div>
-  <script type="module" src="src/main.js"></script>
+<div id="app"></div>
+<script>
+// ── 學年清單（依 sequence_number 排序）──────────────────────────────────────
+const GRADES = [
+  { id: 0,  label: '學前零' },
+  { id: 1,  label: '學前一' },
+  { id: 2,  label: '學前二' },
+  { id: 3,  label: '學前三' },
+  { id: 4,  label: '幼小' },
+  { id: 5,  label: '幼中' },
+  { id: 6,  label: '幼大' },
+  { id: 7,  label: '1年級' },
+  { id: 8,  label: '2年級' },
+  { id: 9,  label: '3年級' },
+  { id: 10, label: '4年級' },
+  { id: 11, label: '5年級' },
+  { id: 12, label: '6年級' },
+  { id: 13, label: '7年級' },
+  { id: 14, label: '8年級' },
+  { id: 15, label: '9年級' },
+  { id: 16, label: '10年級' },
+  { id: 17, label: '11年級' },
+  { id: 18, label: '12年級' },
+  { id: 19, label: '大一' },
+  { id: 20, label: '大二' },
+  { id: 21, label: '大三' },
+  { id: 22, label: '大四' },
+  { id: 23, label: '社會人士' },
+];
+
+// ── 科目（三種）────────────────────────────────────────────────────────────
+const SUBJECTS = ['國語文', '數學', '英文'];
+
+// ── 預設教室清單（管理員可新增）──────────────────────────────────────────────
+const DEFAULT_CLASSROOMS = [
+  { id: 'cls-001', name: '台北大安教室', address: '台北市大安區' },
+  { id: 'cls-002', name: '台北信義教室', address: '台北市信義區' },
+  { id: 'cls-003', name: '新北板橋教室', address: '新北市板橋區' },
+];
+
+// ── 預設帳號 ───────────────────────────────────────────────────────────────
+const DEFAULT_ACCOUNTS = [
+  { id: 'u-admin', name: '系統管理員', role: 'admin',   classroomId: null,      username: 'admin',   password: 'admin123',   active: true },
+  { id: 'u-t001',  name: '陳美玲',     role: 'teacher', classroomId: 'cls-001', username: 'teacher1', password: 'teacher123', active: true },
+  { id: 'u-t002',  name: '張建國',     role: 'teacher', classroomId: 'cls-002', username: 'teacher2', password: 'teacher123', active: true },
+  { id: 'u-t003',  name: '王怡君',     role: 'teacher', classroomId: 'cls-003', username: 'teacher3', password: 'teacher123', active: true },
+];
+
+// ── localStorage helpers ───────────────────────────────────────────────────
+function ls(key, def) {
+  try {
+    const v = localStorage.getItem(key);
+    return v !== null ? JSON.parse(v) : def;
+  } catch { return def; }
+}
+function save(key, val) {
+  localStorage.setItem(key, JSON.stringify(val));
+}
+
+// ── 初始化種子資料 ─────────────────────────────────────────────────────────
+function initData() {
+  if (!localStorage.getItem('ld_inited')) {
+    save('ld_accounts',   DEFAULT_ACCOUNTS);
+    save('ld_classrooms', DEFAULT_CLASSROOMS);
+    save('ld_slots',      []);
+    save('ld_bookings',   []);
+    save('ld_records',    []);
+    localStorage.setItem('ld_inited', '1');
+  }
+}
+
+// ── 帳號 ───────────────────────────────────────────────────────────────────
+const accountsDB = {
+  all:    ()        => ls('ld_accounts', []),
+  get:    id        => accountsDB.all().find(a => a.id === id) || null,
+  save:   list      => save('ld_accounts', list),
+  login:  (u, p)    => accountsDB.all().find(a => a.username === u && a.password === p && a.active) || null,
+  add:    account   => { const list = accountsDB.all(); list.push(account); accountsDB.save(list); },
+  update: (id, patch) => {
+    const list = accountsDB.all().map(a => a.id === id ? { ...a, ...patch } : a);
+    accountsDB.save(list);
+  },
+};
+
+// ── 教室 ───────────────────────────────────────────────────────────────────
+const classroomsDB = {
+  all:  ()      => ls('ld_classrooms', []),
+  get:  id      => classroomsDB.all().find(c => c.id === id) || null,
+  save: list    => save('ld_classrooms', list),
+  add:  classroom => { const list = classroomsDB.all(); list.push(classroom); classroomsDB.save(list); },
+  update: (id, patch) => {
+    const list = classroomsDB.all().map(c => c.id === id ? { ...c, ...patch } : c);
+    classroomsDB.save(list);
+  },
+};
+
+// ── 時段 ───────────────────────────────────────────────────────────────────
+const slotsDB = {
+  all:          ()           => ls('ld_slots', []),
+  byClassroom:  cid          => slotsDB.all().filter(s => s.classroomId === cid),
+  get:          id           => slotsDB.all().find(s => s.id === id) || null,
+  save:         list         => save('ld_slots', list),
+  add:          slot         => { const list = slotsDB.all(); list.push(slot); slotsDB.save(list); },
+  delete:       id           => { slotsDB.save(slotsDB.all().filter(s => s.id !== id)); },
+  update:       (id, patch)  => {
+    slotsDB.save(slotsDB.all().map(s => s.id === id ? { ...s, ...patch } : s));
+  },
+};
+
+// ── 預約 ───────────────────────────────────────────────────────────────────
+const bookingsDB = {
+  all:         ()  => ls('ld_bookings', []),
+  bySlot:      sid => bookingsDB.all().filter(b => b.slotId === sid),
+  byClassroom: cid => {
+    const slotIds = slotsDB.byClassroom(cid).map(s => s.id);
+    return bookingsDB.all().filter(b => slotIds.includes(b.slotId));
+  },
+  get:    id       => bookingsDB.all().find(b => b.id === id) || null,
+  save:   list     => save('ld_bookings', list),
+  add:    booking  => {
+    const list = bookingsDB.all();
+    list.push(booking);
+    bookingsDB.save(list);
+  },
+  cancel: id       => { bookingsDB.save(bookingsDB.all().filter(b => b.id !== id)); },
+  update: (id, patch) => {
+    bookingsDB.save(bookingsDB.all().map(b => b.id === id ? { ...b, ...patch } : b));
+  },
+};
+
+// ── 診斷紀錄 ───────────────────────────────────────────────────────────────
+const recordsDB = {
+  all:          ()  => ls('ld_records', []),
+  byBooking:    bid => recordsDB.all().find(r => r.bookingId === bid) || null,
+  byClassroom:  cid => {
+    const bids = bookingsDB.byClassroom(cid).map(b => b.id);
+    return recordsDB.all().filter(r => bids.includes(r.bookingId));
+  },
+  save:   list      => save('ld_records', list),
+  upsert: record    => {
+    const list = recordsDB.all().filter(r => r.bookingId !== record.bookingId);
+    list.push(record);
+    recordsDB.save(list);
+  },
+};
+
+// ── uid 工廠 ───────────────────────────────────────────────────────────────
+function uid(prefix = 'id') {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+// ── 格式化日期 ────────────────────────────────────────────────────────────
+function fmtDate(isoDate) {
+  const d = new Date(isoDate + 'T00:00:00');
+  const days = ['日','一','二','三','四','五','六'];
+  return `${d.getMonth()+1}/${d.getDate()}（週${days[d.getDay()]}）`;
+}
+
+function fmtDateTime(isoDate, time) {
+  return `${fmtDate(isoDate)} ${time}`;
+}
+
+// ── 統計輔助 ───────────────────────────────────────────────────────────────
+function statsForClassroom(cid) {
+  const slots    = slotsDB.byClassroom(cid);
+  const bookings = bookingsDB.byClassroom(cid);
+  const records  = recordsDB.byClassroom(cid);
+  const total    = bookings.length;
+  const done     = bookings.filter(b => b.status === 'done').length;
+  const pending  = bookings.filter(b => b.status === 'pending').length;
+  const scores   = records.filter(r => r.score != null).map(r => Number(r.score));
+  const avgScore = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
+
+  // 科目分佈
+  const subjectMap = {};
+  SUBJECTS.forEach(s => { subjectMap[s] = 0; });
+  bookings.forEach(b => {
+    const slot = slotsDB.get(b.slotId);
+    if (slot) subjectMap[slot.subject] = (subjectMap[slot.subject] || 0) + 1;
+  });
+
+  return { total, done, pending, avgScore, subjectMap, slotCount: slots.length };
+}
+// Lightweight inline SVG icon helper
+// All icons from Heroicons outline set
+
+function icon(name, cls = '') {
+  const icons = {
+    school: `<svg class="${cls}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5"/></svg>`,
+    calendar: `<svg class="${cls}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"/></svg>`,
+    'calendar-check': `<svg class="${cls}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`,
+    users: `<svg class="${cls}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/></svg>`,
+    'chart-bar': `<svg class="${cls}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/></svg>`,
+    document: `<svg class="${cls}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>`,
+    edit: `<svg class="${cls}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/></svg>`,
+    trash: `<svg class="${cls}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>`,
+    plus: `<svg class="${cls}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>`,
+    check: `<svg class="${cls}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>`,
+    x: `<svg class="${cls}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>`,
+    'eye': `<svg class="${cls}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>`,
+    'shield': `<svg class="${cls}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>`,
+    'logout': `<svg class="${cls}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9"/></svg>`,
+    'info': `<svg class="${cls}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"/></svg>`,
+    'office': `<svg class="${cls}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"/></svg>`,
+    'clock': `<svg class="${cls}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`,
+    'user': `<svg class="${cls}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg>`,
+    'user-plus': `<svg class="${cls}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.766z"/></svg>`,
+    'success': `<svg class="${cls}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`,
+  };
+  return icons[name] || `<svg class="${cls}" viewBox="0 0 24 24"></svg>`;
+}
+
+
+
+function renderLogin(onLogin) {
+  document.body.innerHTML = `
+<div class="login-page">
+  <div class="login-card">
+    <div class="login-logo">${icon('school','icon')}</div>
+    <div class="login-title">學力診斷預約系統</div>
+    <div class="login-sub">教師 / 管理員 登入</div>
+    <div id="login-error" class="alert alert-error hidden">帳號或密碼錯誤，請重試</div>
+    <div class="form-group">
+      <label class="form-label">帳號</label>
+      <input id="login-user" class="form-control" type="text" placeholder="請輸入帳號" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label class="form-label">密碼</label>
+      <input id="login-pass" class="form-control" type="password" placeholder="請輸入密碼" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary btn-block" id="btn-login" style="margin-top:8px">登入</button>
+    <p class="mt-12 text-muted text-zh" style="font-size:.78rem;text-align:center;line-height:1.8">
+      預設帳號：admin / admin123<br>
+      教師帳號：teacher1 / teacher123
+    </p>
+  </div>
+</div>`;
+
+  const doLogin = () => {
+    const u = document.querySelector('#login-user').value.trim();
+    const p = document.querySelector('#login-pass').value;
+    const user = accountsDB.login(u, p);
+    if (user) {
+      onLogin(user);
+    } else {
+      document.querySelector('#login-error').classList.remove('hidden');
+      document.querySelector('#login-pass').value = '';
+      document.querySelector('#login-pass').focus();
+    }
+  };
+
+  document.querySelector('#btn-login').addEventListener('click', doLogin);
+  document.querySelector('#login-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  document.querySelector('#login-user').addEventListener('keydown', e => { if (e.key === 'Enter') document.querySelector('#login-pass').focus(); });
+}
+
+
+
+function renderParentPage(container) {
+  container.innerHTML = buildParentPage();
+  bindParentEvents(container);
+}
+
+function buildParentPage() {
+  const classrooms = classroomsDB.all();
+  const gradeOptions = GRADES.map(g => `<option value="${g.id}">${g.label}</option>`).join('');
+  const subjectOptions = SUBJECTS.map(s => `<option value="${s}">${s}</option>`).join('');
+  const classroomOptions = classrooms.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+
+  return `
+<div class="parent-layout">
+  <div class="parent-topbar">
+    ${icon('school', 'icon')} <span class="parent-topbar-title">學力診斷預約</span>
+  </div>
+  <div class="parent-content">
+    <div id="parent-success-banner" class="alert alert-success hidden">
+      ${icon('success', 'icon')} 預約成功！請準時到診，如需取消請提前聯絡教室。
+    </div>
+
+    <!-- Step indicator -->
+    <div class="step-indicator" id="step-indicator">
+      <div class="step-dot active" id="step-1">1</div>
+      <div class="step-line" id="line-1"></div>
+      <div class="step-dot" id="step-2">2</div>
+      <div class="step-line" id="line-2"></div>
+      <div class="step-dot" id="step-3">${icon('check','icon')}</div>
+    </div>
+
+    <!-- Step 1: 基本資料 -->
+    <div id="parent-step-1">
+      <div class="card">
+        <div class="card-title">填寫學生資料</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">學生姓名 <span class="req">*</span></label>
+            <input id="p-name" class="form-control" type="text" placeholder="請輸入學生姓名">
+          </div>
+          <div class="form-group">
+            <label class="form-label">聯絡電話 <span class="req">*</span></label>
+            <input id="p-phone" class="form-control" type="tel" placeholder="09xx-xxxxxx">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">學年 <span class="req">*</span></label>
+            <select id="p-grade" class="form-control">${gradeOptions}</select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">診斷科目 <span class="req">*</span></label>
+            <select id="p-subject" class="form-control">${subjectOptions}</select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">選擇教室 <span class="req">*</span></label>
+          <select id="p-classroom" class="form-control">${classroomOptions}</select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">家長備註（選填）</label>
+          <textarea id="p-note" class="form-control" placeholder="如：學生近期學習狀況、特別想了解的方向..."></textarea>
+        </div>
+        <div id="p-step1-error" class="form-error hidden"></div>
+        <div class="text-right mt-12">
+          <button class="btn btn-primary" id="btn-to-step2">
+            下一步：選擇時段 ${icon('','icon')}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: 選擇時段 -->
+    <div id="parent-step-2" class="hidden">
+      <div class="card">
+        <div class="card-title">選擇診斷時段</div>
+        <div id="slot-picker-area">
+          <div class="alert alert-info">${icon('info','icon')} 正在載入可用時段...</div>
+        </div>
+        <div id="p-step2-error" class="form-error hidden"></div>
+        <div class="flex justify-between mt-16">
+          <button class="btn" id="btn-back-step1">← 返回修改</button>
+          <button class="btn btn-primary" id="btn-to-step3">確認預約</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: 完成 -->
+    <div id="parent-step-3" class="hidden">
+      <div class="card" style="text-align:center;padding:40px 24px">
+        <div class="score-ring" style="border-color:var(--green-400);color:var(--green-700);width:80px;height:80px;font-size:2rem">
+          ${icon('check','icon')}
+        </div>
+        <h2 class="text-zh" style="margin-bottom:8px;margin-top:4px">預約成功！</h2>
+        <p class="text-muted text-zh" id="confirm-summary"></p>
+        <div id="confirm-detail" class="mt-16" style="background:var(--gray-50);border-radius:var(--radius-md);padding:16px;text-align:left;font-family:var(--font-zh);font-size:.875rem;line-height:2"></div>
+        <button class="btn btn-primary mt-16" id="btn-new-booking">再預約一次</button>
+      </div>
+    </div>
+
+    <!-- 我的預約紀錄（手機號查詢）-->
+    <div class="card mt-16">
+      <div class="card-title">查詢我的預約紀錄</div>
+      <div class="flex gap-8">
+        <input id="query-phone" class="form-control" type="tel" placeholder="輸入聯絡電話查詢">
+        <button class="btn btn-primary" id="btn-query" style="white-space:nowrap">${icon('eye','icon')} 查詢</button>
+      </div>
+      <div id="query-result" class="mt-12"></div>
+    </div>
+  </div>
+</div>`;
+}
+
+let selectedSlotId = null;
+let step1Data = {};
+
+function bindParentEvents(container) {
+  selectedSlotId = null;
+  step1Data = {};
+
+  // Step 1 → Step 2
+  container.querySelector('#btn-to-step2').addEventListener('click', () => {
+    const name    = container.querySelector('#p-name').value.trim();
+    const phone   = container.querySelector('#p-phone').value.trim();
+    const gradeId = container.querySelector('#p-grade').value;
+    const subject = container.querySelector('#p-subject').value;
+    const cid     = container.querySelector('#p-classroom').value;
+    const note    = container.querySelector('#p-note').value.trim();
+    const errEl   = container.querySelector('#p-step1-error');
+
+    if (!name || !phone) {
+      errEl.textContent = '請填寫學生姓名與聯絡電話';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    errEl.classList.add('hidden');
+    step1Data = { name, phone, gradeId: Number(gradeId), subject, classroomId: cid, note };
+
+    renderSlotPicker(container, cid, subject);
+    goToStep(container, 2);
+  });
+
+  // Step 2 → Step 1
+  container.querySelector('#btn-back-step1').addEventListener('click', () => goToStep(container, 1));
+
+  // Step 2 → Confirm
+  container.querySelector('#btn-to-step3').addEventListener('click', () => {
+    if (!selectedSlotId) {
+      const errEl = container.querySelector('#p-step2-error');
+      errEl.textContent = '請選擇一個可用時段';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    confirmBooking(container);
+  });
+
+  // New booking
+  container.querySelector('#btn-new-booking').addEventListener('click', () => {
+    selectedSlotId = null;
+    step1Data = {};
+    container.querySelector('#p-name').value = '';
+    container.querySelector('#p-phone').value = '';
+    container.querySelector('#p-note').value = '';
+    goToStep(container, 1);
+  });
+
+  // Query bookings
+  container.querySelector('#btn-query').addEventListener('click', () => {
+    const phone = container.querySelector('#query-phone').value.trim();
+    renderQueryResult(container, phone);
+  });
+  container.querySelector('#query-phone').addEventListener('keydown', e => {
+    if (e.key === 'Enter') container.querySelector('#btn-query').click();
+  });
+}
+
+function goToStep(container, step) {
+  [1, 2, 3].forEach(n => {
+    container.querySelector(`#parent-step-${n}`).classList.toggle('hidden', n !== step);
+    const dot = container.querySelector(`#step-${n}`);
+    dot.classList.remove('active', 'done');
+    if (n < step) dot.classList.add('done');
+    else if (n === step) dot.classList.add('active');
+    if (n < 3) {
+      const line = container.querySelector(`#line-${n}`);
+      line.classList.toggle('done', n < step);
+    }
+  });
+}
+
+function renderSlotPicker(container, classroomId, subject) {
+  selectedSlotId = null;
+  const area = container.querySelector('#slot-picker-area');
+  const slots = slotsDB.byClassroom(classroomId)
+    .filter(s => s.subject === subject)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+
+  // Group by date
+  const byDate = {};
+  slots.forEach(s => {
+    if (!byDate[s.date]) byDate[s.date] = [];
+    byDate[s.date].push(s);
+  });
+
+  if (Object.keys(byDate).length === 0) {
+    area.innerHTML = `<div class="alert alert-amber">${icon('info','icon')} 目前此教室沒有「${subject}」的開放時段，請聯絡教室或稍後再查詢。</div>`;
+    return;
+  }
+
+  let html = '';
+  Object.keys(byDate).sort().forEach(date => {
+    html += `<p class="fw-600 text-zh mb-8 mt-12" style="font-size:.875rem;color:var(--gray-700)">${icon('calendar','icon')} ${fmtDate(date)}</p>`;
+    html += `<div class="slot-grid">`;
+    byDate[date].forEach(slot => {
+      const booked = bookingsDB.bySlot(slot.id).length;
+      const remain = slot.capacity - booked;
+      const full   = remain <= 0;
+      html += `
+        <div class="slot-card ${full ? 'full' : ''}" data-slot-id="${slot.id}">
+          <div class="slot-time">${slot.time}</div>
+          <div class="slot-meta">${full ? '<span class="slot-full-label">已額滿</span>' : `剩 ${remain} 位`}</div>
+        </div>`;
+    });
+    html += `</div>`;
+  });
+  area.innerHTML = html;
+
+  area.querySelectorAll('.slot-card:not(.full)').forEach(el => {
+    el.addEventListener('click', () => {
+      area.querySelectorAll('.slot-card').forEach(c => c.classList.remove('selected'));
+      el.classList.add('selected');
+      selectedSlotId = el.dataset.slotId;
+      container.querySelector('#p-step2-error').classList.add('hidden');
+    });
+  });
+}
+
+function confirmBooking(container) {
+  const slot     = slotsDB.get(selectedSlotId);
+  const classroom = classroomsDB.get(step1Data.classroomId);
+  const grade    = GRADES.find(g => g.id === step1Data.gradeId);
+  const booking  = {
+    id: uid('bk'),
+    slotId: selectedSlotId,
+    studentName: step1Data.name,
+    phone: step1Data.phone,
+    gradeId: step1Data.gradeId,
+    subject: step1Data.subject,
+    classroomId: step1Data.classroomId,
+    note: step1Data.note,
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+  };
+  bookingsDB.add(booking);
+
+  container.querySelector('#confirm-summary').textContent =
+    `${step1Data.name} 同學的 ${step1Data.subject} 學力診斷`;
+  container.querySelector('#confirm-detail').innerHTML = `
+    <div>📚 科目：${step1Data.subject}</div>
+    <div>🎓 學年：${grade?.label || ''}</div>
+    <div>🏫 教室：${classroom?.name || ''}</div>
+    <div>📅 日期：${fmtDate(slot.date)}</div>
+    <div>⏰ 時間：${slot.time}</div>
+    <div>📞 聯絡電話：${step1Data.phone}</div>
+    ${step1Data.note ? `<div>📝 備註：${step1Data.note}</div>` : ''}
+  `;
+  goToStep(container, 3);
+}
+
+function renderQueryResult(container, phone) {
+  const result = container.querySelector('#query-result');
+  if (!phone) { result.innerHTML = `<div class="form-error">請輸入電話號碼</div>`; return; }
+
+  const bookings = bookingsDB.all()
+    .filter(b => b.phone === phone)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  if (bookings.length === 0) {
+    result.innerHTML = `<div class="alert alert-amber">${icon('info','icon')} 查無此電話的預約紀錄</div>`;
+    return;
+  }
+
+  const statusMap = { pending: ['待診斷','badge-amber'], done: ['已完成','badge-green'], cancelled: ['已取消','badge-gray'] };
+
+  let rows = bookings.map(b => {
+    const slot = slotsDB.get(b.slotId);
+    const cls  = classroomsDB.get(b.classroomId);
+    const [label, cls2] = statusMap[b.status] || ['未知','badge-gray'];
+    return `<tr>
+      <td>${b.studentName}</td>
+      <td>${slot ? fmtDate(slot.date) : '-'}</td>
+      <td>${slot?.time || '-'}</td>
+      <td>${b.subject}</td>
+      <td>${cls?.name || '-'}</td>
+      <td><span class="badge ${cls2}">${label}</span></td>
+    </tr>`;
+  }).join('');
+
+  result.innerHTML = `
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>學生</th><th>日期</th><th>時間</th><th>科目</th><th>教室</th><th>狀態</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+
+
+// ── 教師：時段管理 ─────────────────────────────────────────────────────────
+function renderTeacherSlots(container, user) {
+  container.innerHTML = buildSlotPage(user);
+  bindSlotEvents(container, user);
+}
+
+function buildSlotPage(user) {
+  const today = new Date().toISOString().slice(0, 10);
+  const subjectOptions = SUBJECTS.map(s => `<option>${s}</option>`).join('');
+  return `
+<div class="page-header">
+  <div class="page-title">開放時段管理</div>
+  <div class="page-subtitle">管理可供家長預約的診斷時段</div>
+</div>
+
+<div class="card">
+  <div class="card-title">新增開放時段</div>
+  <div class="form-row-3">
+    <div class="form-group">
+      <label class="form-label">日期 <span class="req">*</span></label>
+      <input id="new-date" class="form-control" type="date" min="${today}" value="${today}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">開始時間 <span class="req">*</span></label>
+      <select id="new-time" class="form-control">
+        ${['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30',
+           '13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00','19:00','19:30','20:00']
+          .map(t => `<option>${t}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">科目 <span class="req">*</span></label>
+      <select id="new-subject" class="form-control">${subjectOptions}</select>
+    </div>
+  </div>
+  <div class="form-row">
+    <div class="form-group">
+      <label class="form-label">容納人數</label>
+      <select id="new-capacity" class="form-control">
+        ${[1,2,3,4,5,6,8,10].map(n => `<option value="${n}">${n} 人</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group" style="display:flex;align-items:flex-end">
+      <button class="btn btn-primary btn-block" id="btn-add-slot">
+        ${icon('plus','icon')} 新增時段
+      </button>
+    </div>
+  </div>
+  <div id="slot-add-error" class="form-error hidden"></div>
+</div>
+
+<div class="card">
+  <div class="flex justify-between items-center" style="margin-bottom:14px">
+    <div class="card-title" style="margin-bottom:0;border-bottom:none;padding-bottom:0">時段列表</div>
+    <div class="flex gap-8">
+      <select id="filter-date" class="form-control" style="width:auto;font-size:.8rem">
+        <option value="">全部日期</option>
+      </select>
+      <select id="filter-subject" class="form-control" style="width:auto;font-size:.8rem">
+        <option value="">全部科目</option>
+        ${SUBJECTS.map(s => `<option>${s}</option>`).join('')}
+      </select>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>日期</th><th>時間</th><th>科目</th><th>容量</th><th>已預約</th><th>狀態</th><th>操作</th></tr></thead>
+      <tbody id="slots-tbody"></tbody>
+    </table>
+  </div>
+</div>`;
+}
+
+function bindSlotEvents(container, user) {
+  renderSlotsTable(container, user);
+  populateDateFilter(container, user);
+
+  container.querySelector('#btn-add-slot').addEventListener('click', () => {
+    const date     = container.querySelector('#new-date').value;
+    const time     = container.querySelector('#new-time').value;
+    const subject  = container.querySelector('#new-subject').value;
+    const capacity = Number(container.querySelector('#new-capacity').value);
+    const errEl    = container.querySelector('#slot-add-error');
+
+    if (!date) { errEl.textContent = '請選擇日期'; errEl.classList.remove('hidden'); return; }
+    errEl.classList.add('hidden');
+
+    // Duplicate check
+    const existing = slotsDB.byClassroom(user.classroomId).find(s => s.date === date && s.time === time && s.subject === subject);
+    if (existing) { errEl.textContent = '此日期時間與科目已存在相同時段'; errEl.classList.remove('hidden'); return; }
+
+    slotsDB.add({ id: uid('sl'), classroomId: user.classroomId, date, time, subject, capacity, createdAt: new Date().toISOString() });
+    renderSlotsTable(container, user);
+    populateDateFilter(container, user);
+    showToast('時段已新增', 'success');
+  });
+
+  container.querySelector('#filter-date').addEventListener('change', () => renderSlotsTable(container, user));
+  container.querySelector('#filter-subject').addEventListener('change', () => renderSlotsTable(container, user));
+}
+
+function renderSlotsTable(container, user) {
+  const tbody      = container.querySelector('#slots-tbody');
+  const filterDate = container.querySelector('#filter-date')?.value || '';
+  const filterSub  = container.querySelector('#filter-subject')?.value || '';
+
+  let slots = slotsDB.byClassroom(user.classroomId)
+    .filter(s => (!filterDate || s.date === filterDate) && (!filterSub || s.subject === filterSub))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+
+  if (!slots.length) { tbody.innerHTML = `<tr><td colspan="7" class="table-empty">尚無時段，請新增</td></tr>`; return; }
+
+  tbody.innerHTML = slots.map(s => {
+    const booked = bookingsDB.bySlot(s.id).length;
+    const remain = s.capacity - booked;
+    const full   = remain <= 0;
+    return `<tr>
+      <td>${fmtDate(s.date)}</td>
+      <td><span style="font-family:var(--font-body);font-weight:600">${s.time}</span></td>
+      <td><span class="badge badge-blue">${s.subject}</span></td>
+      <td>${s.capacity}</td>
+      <td>${booked}</td>
+      <td><span class="badge ${full ? 'badge-red' : 'badge-green'}">${full ? '已額滿' : `剩 ${remain}`}</span></td>
+      <td>
+        <button class="btn btn-sm btn-danger" data-del="${s.id}" ${booked > 0 ? 'disabled title="已有預約，無法刪除"' : ''}>
+          ${icon('trash','icon')} 刪除
+        </button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  tbody.querySelectorAll('[data-del]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!confirm('確定要刪除此時段？')) return;
+      slotsDB.delete(btn.dataset.del);
+      renderSlotsTable(container, user);
+      populateDateFilter(container, user);
+      showToast('時段已刪除');
+    });
+  });
+}
+
+function populateDateFilter(container, user) {
+  const sel   = container.querySelector('#filter-date');
+  if (!sel) return;
+  const cur   = sel.value;
+  const dates = [...new Set(slotsDB.byClassroom(user.classroomId).map(s => s.date))].sort();
+  sel.innerHTML = `<option value="">全部日期</option>` + dates.map(d => `<option value="${d}" ${d === cur ? 'selected' : ''}>${fmtDate(d)}</option>`).join('');
+}
+
+// ── 教師：預約名單 ─────────────────────────────────────────────────────────
+function renderTeacherBookings(container, user) {
+  container.innerHTML = buildBookingsPage(user);
+  bindBookingsEvents(container, user);
+}
+
+function buildBookingsPage(user) {
+  return `
+<div class="page-header">
+  <div class="page-title">預約名單</div>
+  <div class="page-subtitle">查看各時段預約學生，填寫診斷紀錄</div>
+</div>
+
+<div class="card">
+  <div class="flex gap-8 mb-16" style="flex-wrap:wrap">
+    <select id="bk-filter-date" class="form-control" style="width:auto;font-size:.8rem"><option value="">全部日期</option></select>
+    <select id="bk-filter-sub" class="form-control" style="width:auto;font-size:.8rem">
+      <option value="">全部科目</option>${SUBJECTS.map(s=>`<option>${s}</option>`).join('')}
+    </select>
+    <select id="bk-filter-status" class="form-control" style="width:auto;font-size:.8rem">
+      <option value="">全部狀態</option>
+      <option value="pending">待診斷</option>
+      <option value="done">已完成</option>
+    </select>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>學生</th><th>學年</th><th>科目</th><th>日期</th><th>時間</th><th>狀態</th><th>操作</th></tr></thead>
+      <tbody id="bk-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 診斷紀錄 Modal -->
+<div id="record-modal" class="modal-backdrop hidden">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div class="modal-title" id="record-modal-title">填寫診斷紀錄</div>
+      <button class="modal-close" id="record-modal-close">${icon('x','icon')}</button>
+    </div>
+    <div id="record-modal-body"></div>
+  </div>
+</div>`;
+}
+
+function bindBookingsEvents(container, user) {
+  populateBkDateFilter(container, user);
+  renderBookingsTable(container, user);
+
+  ['#bk-filter-date','#bk-filter-sub','#bk-filter-status'].forEach(sel => {
+    container.querySelector(sel)?.addEventListener('change', () => renderBookingsTable(container, user));
+  });
+
+  container.querySelector('#record-modal-close').addEventListener('click', () => {
+    container.querySelector('#record-modal').classList.add('hidden');
+  });
+}
+
+function renderBookingsTable(container, user) {
+  const tbody  = container.querySelector('#bk-tbody');
+  const fDate  = container.querySelector('#bk-filter-date')?.value || '';
+  const fSub   = container.querySelector('#bk-filter-sub')?.value || '';
+  const fStatus= container.querySelector('#bk-filter-status')?.value || '';
+
+  const slotIds = slotsDB.byClassroom(user.classroomId).map(s => s.id);
+  let bookings  = bookingsDB.all()
+    .filter(b => slotIds.includes(b.slotId))
+    .filter(b => !fStatus || b.status === fStatus);
+
+  if (fDate || fSub) {
+    bookings = bookings.filter(b => {
+      const slot = slotsDB.get(b.slotId);
+      return (!fDate || slot?.date === fDate) && (!fSub || slot?.subject === fSub);
+    });
+  }
+
+  bookings.sort((a, b) => {
+    const sa = slotsDB.get(a.slotId), sb = slotsDB.get(b.slotId);
+    return (sa?.date || '').localeCompare(sb?.date || '') || (sa?.time || '').localeCompare(sb?.time || '');
+  });
+
+  if (!bookings.length) { tbody.innerHTML = `<tr><td colspan="7" class="table-empty">查無符合的預約</td></tr>`; return; }
+
+  const statusMap = { pending: ['待診斷','badge-amber'], done: ['已完成','badge-green'], cancelled: ['已取消','badge-gray'] };
+  const colors = ['av-green','av-amber','av-blue'];
+
+  tbody.innerHTML = bookings.map((b, i) => {
+    const slot  = slotsDB.get(b.slotId);
+    const grade = GRADES.find(g => g.id === b.gradeId);
+    const [statusLabel, statusCls] = statusMap[b.status] || ['未知','badge-gray'];
+    const rec   = recordsDB.byBooking(b.id);
+    return `<tr>
+      <td>
+        <div class="flex items-center gap-8">
+          <div class="avatar ${colors[i%3]}">${b.studentName.slice(-1)}</div>
+          <div>
+            <div class="fw-600 text-zh">${b.studentName}</div>
+            <div class="text-xs text-muted">${b.phone}</div>
+          </div>
+        </div>
+      </td>
+      <td>${grade?.label || '-'}</td>
+      <td><span class="badge badge-blue">${b.subject}</span></td>
+      <td>${slot ? fmtDate(slot.date) : '-'}</td>
+      <td style="font-family:var(--font-body);font-weight:600">${slot?.time || '-'}</td>
+      <td><span class="badge ${statusCls}">${statusLabel}${rec ? ' ✓' : ''}</span></td>
+      <td class="flex gap-8">
+        <button class="btn btn-sm btn-primary" data-open-record="${b.id}">
+          ${icon('edit','icon')} ${b.status === 'done' ? '查看' : '填寫'}紀錄
+        </button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  tbody.querySelectorAll('[data-open-record]').forEach(btn => {
+    btn.addEventListener('click', () => openRecordModal(container, user, btn.dataset.openRecord));
+  });
+}
+
+function openRecordModal(container, user, bookingId) {
+  const b     = bookingsDB.get(bookingId);
+  const slot  = slotsDB.get(b?.slotId);
+  const grade = GRADES.find(g => g.id === b?.gradeId);
+  const rec   = recordsDB.byBooking(bookingId) || {};
+  const modal = container.querySelector('#record-modal');
+  const plans = ['一般強化方案（週2次）','密集衝刺方案（週4次）','輕鬆保溫方案（週1次）','暫不建議報名'];
+
+  container.querySelector('#record-modal-title').textContent =
+    `${b.studentName} — ${b.subject} 診斷紀錄`;
+
+  container.querySelector('#record-modal-body').innerHTML = `
+    <div class="flex items-center gap-12 mb-16 p-12" style="background:var(--gray-50);border-radius:var(--radius-md)">
+      <div class="score-ring">${rec.score ?? '--'}</div>
+      <div class="text-zh" style="font-size:.875rem;line-height:1.9">
+        <div><strong>學生：</strong>${b.studentName} ／ ${grade?.label || ''}</div>
+        <div><strong>科目：</strong>${b.subject}</div>
+        <div><strong>時間：</strong>${slot ? fmtDate(slot.date)+' '+slot.time : '-'}</div>
+        ${b.note ? `<div><strong>家長備註：</strong>${b.note}</div>` : ''}
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">整體評分（0–100）</label>
+        <div class="score-input-wrap">
+          <div class="score-preview" id="score-preview-val">${rec.score ?? '--'}</div>
+          <input id="rec-score" type="number" min="0" max="100" class="form-control score-field" value="${rec.score ?? ''}">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">建議課程方案</label>
+        <select id="rec-plan" class="form-control">
+          ${plans.map(p => `<option ${rec.plan === p ? 'selected' : ''}>${p}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">強項能力</label>
+      <input id="rec-strength" type="text" class="form-control" placeholder="如：計算能力佳、閱讀理解強" value="${rec.strength || ''}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">待加強項目</label>
+      <input id="rec-weakness" type="text" class="form-control" placeholder="如：應用題理解、文字題判斷" value="${rec.weakness || ''}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">教師建議</label>
+      <textarea id="rec-note" class="form-control">${rec.note || ''}</textarea>
+    </div>
+    <div id="rec-save-error" class="form-error hidden"></div>
+    <div class="modal-footer">
+      <button class="btn" id="rec-cancel">取消</button>
+      <button class="btn btn-primary" id="rec-save">儲存紀錄 & 標記完成</button>
+    </div>`;
+
+  // Live score preview
+  container.querySelector('#rec-score').addEventListener('input', e => {
+    container.querySelector('#score-preview-val').textContent = e.target.value || '--';
+  });
+  container.querySelector('#rec-cancel').addEventListener('click', () => modal.classList.add('hidden'));
+  container.querySelector('#rec-save').addEventListener('click', () => {
+    const score = container.querySelector('#rec-score').value;
+    recordsDB.upsert({
+      bookingId,
+      score:    score !== '' ? Number(score) : null,
+      strength: container.querySelector('#rec-strength').value.trim(),
+      weakness: container.querySelector('#rec-weakness').value.trim(),
+      plan:     container.querySelector('#rec-plan').value,
+      note:     container.querySelector('#rec-note').value.trim(),
+      savedAt:  new Date().toISOString(),
+      teacherId: user.id,
+    });
+    bookingsDB.update(bookingId, { status: 'done' });
+    modal.classList.add('hidden');
+    renderBookingsTable(container, user);
+    showToast('紀錄已儲存', 'success');
+  });
+
+  modal.classList.remove('hidden');
+}
+
+function populateBkDateFilter(container, user) {
+  const sel   = container.querySelector('#bk-filter-date');
+  if (!sel) return;
+  const dates = [...new Set(slotsDB.byClassroom(user.classroomId).map(s => s.date))].sort();
+  sel.innerHTML = `<option value="">全部日期</option>` + dates.map(d => `<option value="${d}">${fmtDate(d)}</option>`).join('');
+}
+
+// ── Toast helper ───────────────────────────────────────────────────────────
+function showToast(msg, type = '') {
+  let tc = document.querySelector('.toast-container');
+  if (!tc) { tc = document.createElement('div'); tc.className = 'toast-container'; document.body.appendChild(tc); }
+  const t = document.createElement('div');
+  t.className = `toast${type ? ' toast-'+type : ''}`;
+  t.textContent = msg;
+  tc.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+
+
+// ── 管理員：數據總覽 ───────────────────────────────────────────────────────
+function renderAdminOverview(container) {
+  const classrooms = classroomsDB.all();
+  const allBookings = bookingsDB.all();
+  const allRecords  = recordsDB.all();
+  const scores = allRecords.filter(r => r.score != null).map(r => Number(r.score));
+  const avgScore = scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : null;
+  const doneCount = allBookings.filter(b => b.status === 'done').length;
+  const rate = allBookings.length ? Math.round(doneCount / allBookings.length * 100) : 0;
+
+  // Subject stats
+  const subStats = {};
+  SUBJECTS.forEach(s => subStats[s] = 0);
+  allBookings.forEach(b => {
+    const slot = slotsDB.get(b.slotId);
+    if (slot) subStats[slot.subject] = (subStats[slot.subject] || 0) + 1;
+  });
+  const total = allBookings.length || 1;
+
+  // Per-classroom stats
+  const cStats = classrooms.map(c => ({ c, s: statsForClassroom(c.id) })).sort((a,b)=>b.s.total-a.s.total);
+  const maxTotal = Math.max(...cStats.map(x=>x.s.total), 1);
+
+  container.innerHTML = `
+<div class="page-header">
+  <div class="page-title">數據總覽</div>
+  <div class="page-subtitle">全加盟教室彙整統計</div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-label">累計總預約</div><div class="stat-value">${allBookings.length}</div></div>
+  <div class="stat-card"><div class="stat-label">診斷完成</div><div class="stat-value green">${doneCount}</div></div>
+  <div class="stat-card"><div class="stat-label">完成率</div><div class="stat-value green">${rate}%</div></div>
+  <div class="stat-card"><div class="stat-label">全局平均分</div><div class="stat-value amber">${avgScore ?? '—'}</div></div>
+  <div class="stat-card"><div class="stat-label">加盟教室數</div><div class="stat-value">${classrooms.length}</div></div>
+  <div class="stat-card"><div class="stat-label">教師帳號</div><div class="stat-value">${accountsDB.all().filter(a=>a.role==='teacher').length}</div></div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-title">各教室預約量</div>
+    <div class="bar-chart">
+      ${cStats.map(({c,s}) => `
+        <div class="bar-col">
+          <div class="bar-val">${s.total}</div>
+          <div class="bar" style="height:${Math.max(s.total/maxTotal*100,4)}%"></div>
+          <div class="bar-label">${c.name.replace('教室','')}</div>
+        </div>
+      `).join('')}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">科目診斷分佈</div>
+    ${SUBJECTS.map(s => {
+      const count = subStats[s] || 0;
+      const pct   = Math.round(count / total * 100);
+      return `
+      <div class="mb-16">
+        <div class="flex justify-between mb-8">
+          <span class="text-zh fw-600" style="font-size:.875rem">${s}</span>
+          <span class="text-muted" style="font-size:.8rem">${count} 件（${pct}%）</span>
+        </div>
+        <div class="progress"><div class="progress-fill" style="width:${pct}%"></div></div>
+      </div>`;
+    }).join('')}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">教室詳細數據</div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>教室</th><th>累計預約</th><th>已完成</th><th>完成率</th><th>平均分</th><th>最熱門科目</th></tr></thead>
+      <tbody>
+        ${cStats.map(({c,s}) => {
+          const r = s.total ? Math.round(s.done/s.total*100) : 0;
+          const hotSub = Object.entries(s.subjectMap).sort((a,b)=>b[1]-a[1])[0];
+          return `<tr>
+            <td class="fw-600 text-zh">${c.name}</td>
+            <td>${s.total}</td>
+            <td>${s.done}</td>
+            <td>
+              <div class="flex items-center gap-8">
+                <div class="progress" style="width:60px"><div class="progress-fill" style="width:${r}%"></div></div>
+                <span style="font-size:.8rem">${r}%</span>
+              </div>
+            </td>
+            <td>${s.avgScore ?? '—'}</td>
+            <td>${hotSub && hotSub[1] > 0 ? `<span class="badge badge-blue">${hotSub[0]}</span>` : '—'}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  </div>
+</div>`;
+}
+
+// ── 管理員：教室管理 ───────────────────────────────────────────────────────
+function renderAdminClassrooms(container) {
+  container.innerHTML = buildClassroomPage();
+  bindClassroomEvents(container);
+}
+
+function buildClassroomPage() {
+  return `
+<div class="page-header">
+  <div class="page-title">教室管理</div>
+  <div class="page-subtitle">管理加盟教室資料</div>
+</div>
+<div class="card">
+  <div class="card-title">新增教室</div>
+  <div class="form-row">
+    <div class="form-group">
+      <label class="form-label">教室名稱 <span class="req">*</span></label>
+      <input id="new-cls-name" class="form-control" placeholder="如：台北中山教室">
+    </div>
+    <div class="form-group">
+      <label class="form-label">地址</label>
+      <input id="new-cls-addr" class="form-control" placeholder="台北市中山區…">
+    </div>
+  </div>
+  <div id="cls-add-error" class="form-error hidden"></div>
+  <button class="btn btn-primary" id="btn-add-cls">${icon('plus','icon')} 新增教室</button>
+</div>
+<div class="card">
+  <div class="card-title">教室列表</div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>教室名稱</th><th>地址</th><th>教師人數</th><th>累計預約</th><th>操作</th></tr></thead>
+      <tbody id="cls-tbody"></tbody>
+    </table>
+  </div>
+</div>`;
+}
+
+function bindClassroomEvents(container) {
+  renderClassroomsTable(container);
+  container.querySelector('#btn-add-cls').addEventListener('click', () => {
+    const name = container.querySelector('#new-cls-name').value.trim();
+    const addr = container.querySelector('#new-cls-addr').value.trim();
+    const err  = container.querySelector('#cls-add-error');
+    if (!name) { err.textContent='請輸入教室名稱'; err.classList.remove('hidden'); return; }
+    err.classList.add('hidden');
+    classroomsDB.add({ id: uid('cls'), name, address: addr });
+    container.querySelector('#new-cls-name').value = '';
+    container.querySelector('#new-cls-addr').value = '';
+    renderClassroomsTable(container);
+    showToast('教室已新增', 'success');
+  });
+}
+
+function renderClassroomsTable(container) {
+  const tbody = container.querySelector('#cls-tbody');
+  const list  = classroomsDB.all();
+  if (!list.length) { tbody.innerHTML = `<tr><td colspan="5" class="table-empty">尚無教室</td></tr>`; return; }
+
+  tbody.innerHTML = list.map(c => {
+    const teachers = accountsDB.all().filter(a => a.classroomId === c.id && a.role === 'teacher').length;
+    const bookings = bookingsDB.byClassroom(c.id).length;
+    return `<tr>
+      <td class="fw-600 text-zh">${c.name}</td>
+      <td class="text-muted">${c.address || '—'}</td>
+      <td>${teachers}</td>
+      <td>${bookings}</td>
+      <td>
+        <button class="btn btn-sm" data-edit-cls="${c.id}">${icon('edit','icon')} 編輯</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── 管理員：帳號管理 ───────────────────────────────────────────────────────
+function renderAdminAccounts(container) {
+  container.innerHTML = buildAccountPage();
+  bindAccountEvents(container);
+}
+
+function buildAccountPage() {
+  const clsOptions = classroomsDB.all().map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  return `
+<div class="page-header">
+  <div class="page-title">帳號管理</div>
+  <div class="page-subtitle">管理教師與管理員帳號</div>
+</div>
+<div class="card">
+  <div class="card-title">新增帳號</div>
+  <div class="form-row">
+    <div class="form-group">
+      <label class="form-label">姓名 <span class="req">*</span></label>
+      <input id="new-acc-name" class="form-control" placeholder="教師姓名">
+    </div>
+    <div class="form-group">
+      <label class="form-label">帳號 <span class="req">*</span></label>
+      <input id="new-acc-user" class="form-control" placeholder="登入帳號">
+    </div>
+  </div>
+  <div class="form-row">
+    <div class="form-group">
+      <label class="form-label">密碼 <span class="req">*</span></label>
+      <input id="new-acc-pass" class="form-control" type="password" placeholder="設定密碼">
+    </div>
+    <div class="form-group">
+      <label class="form-label">角色</label>
+      <select id="new-acc-role" class="form-control">
+        <option value="teacher">教師</option>
+        <option value="admin">管理員</option>
+      </select>
+    </div>
+  </div>
+  <div class="form-group">
+    <label class="form-label">所屬教室（教師必填）</label>
+    <select id="new-acc-cls" class="form-control">
+      <option value="">— 選擇教室 —</option>${clsOptions}
+    </select>
+  </div>
+  <div id="acc-add-error" class="form-error hidden"></div>
+  <button class="btn btn-primary" id="btn-add-acc">${icon('user-plus','icon')} 新增帳號</button>
+</div>
+<div class="card">
+  <div class="flex justify-between items-center mb-16">
+    <div class="card-title" style="margin-bottom:0;border:none;padding:0">帳號列表</div>
+    <select id="acc-filter-role" class="form-control" style="width:auto;font-size:.8rem">
+      <option value="">全部角色</option>
+      <option value="teacher">教師</option>
+      <option value="admin">管理員</option>
+    </select>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>姓名</th><th>帳號</th><th>角色</th><th>所屬教室</th><th>狀態</th><th>操作</th></tr></thead>
+      <tbody id="acc-tbody"></tbody>
+    </table>
+  </div>
+</div>`;
+}
+
+function bindAccountEvents(container) {
+  renderAccountsTable(container);
+  container.querySelector('#acc-filter-role').addEventListener('change', () => renderAccountsTable(container));
+  container.querySelector('#new-acc-role').addEventListener('change', e => {
+    container.querySelector('#new-acc-cls').closest('.form-group').style.opacity = e.target.value === 'admin' ? '.4' : '1';
+  });
+
+  container.querySelector('#btn-add-acc').addEventListener('click', () => {
+    const name = container.querySelector('#new-acc-name').value.trim();
+    const user = container.querySelector('#new-acc-user').value.trim();
+    const pass = container.querySelector('#new-acc-pass').value;
+    const role = container.querySelector('#new-acc-role').value;
+    const cid  = container.querySelector('#new-acc-cls').value;
+    const err  = container.querySelector('#acc-add-error');
+
+    if (!name || !user || !pass) { err.textContent = '請填寫姓名、帳號與密碼'; err.classList.remove('hidden'); return; }
+    if (role === 'teacher' && !cid) { err.textContent = '教師帳號請選擇所屬教室'; err.classList.remove('hidden'); return; }
+    if (accountsDB.all().find(a => a.username === user)) { err.textContent = '此帳號名稱已存在'; err.classList.remove('hidden'); return; }
+    err.classList.add('hidden');
+
+    accountsDB.add({ id: uid('u'), name, role, classroomId: cid || null, username: user, password: pass, active: true });
+    ['#new-acc-name','#new-acc-user','#new-acc-pass'].forEach(s => container.querySelector(s).value = '');
+    container.querySelector('#new-acc-cls').value = '';
+    renderAccountsTable(container);
+    showToast('帳號已建立', 'success');
+  });
+}
+
+function renderAccountsTable(container) {
+  const tbody  = container.querySelector('#acc-tbody');
+  const filter = container.querySelector('#acc-filter-role')?.value || '';
+  let list = accountsDB.all().filter(a => !filter || a.role === filter);
+
+  if (!list.length) { tbody.innerHTML = `<tr><td colspan="6" class="table-empty">查無帳號</td></tr>`; return; }
+
+  tbody.innerHTML = list.map(a => {
+    const cls = a.classroomId ? classroomsDB.get(a.classroomId) : null;
+    return `<tr>
+      <td>
+        <div class="flex items-center gap-8">
+          <div class="avatar av-green">${a.name.slice(-1)}</div>
+          <span class="fw-600 text-zh">${a.name}</span>
+        </div>
+      </td>
+      <td class="text-muted" style="font-family:var(--font-body)">${a.username}</td>
+      <td><span class="badge ${a.role==='admin'?'badge-amber':'badge-blue'}">${a.role==='admin'?'管理員':'教師'}</span></td>
+      <td class="text-zh">${cls?.name || '—'}</td>
+      <td><span class="badge ${a.active?'badge-green':'badge-red'}">${a.active?'啟用':'停用'}</span></td>
+      <td class="flex gap-8">
+        <button class="btn btn-sm" data-toggle-acc="${a.id}" data-active="${a.active}">
+          ${a.active ? '停用' : '啟用'}
+        </button>
+        <button class="btn btn-sm" data-reset-pw="${a.id}">${icon('edit','icon')} 改密碼</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  tbody.querySelectorAll('[data-toggle-acc]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const active = btn.dataset.active === 'true';
+      if (!confirm(`確定要${active?'停用':'啟用'}此帳號？`)) return;
+      accountsDB.update(btn.dataset.toggleAcc, { active: !active });
+      renderAccountsTable(container);
+      showToast(`帳號已${active?'停用':'啟用'}`);
+    });
+  });
+
+  tbody.querySelectorAll('[data-reset-pw]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const pw = prompt('請輸入新密碼（至少6位）');
+      if (!pw || pw.length < 6) { showToast('密碼至少需要6位', 'error'); return; }
+      accountsDB.update(btn.dataset.resetPw, { password: pw });
+      showToast('密碼已更新', 'success');
+    });
+  });
+}
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+
+
+
+
+
+
+
+// ── Bootstrap ──────────────────────────────────────────────────────────────
+initData();
+
+let currentUser = null;
+
+// Check session
+const savedUserId = sessionStorage.getItem('ld_user');
+if (savedUserId) {
+  currentUser = accountsDB.get(savedUserId);
+}
+
+if (currentUser) {
+  mountApp();
+} else {
+  // Check URL param for parent view
+  const params = new URLSearchParams(location.search);
+  if (params.get('view') === 'book') {
+    mountParentView();
+  } else {
+    showEntryScreen();
+  }
+}
+
+// ── Entry screen (choose parent or staff) ──────────────────────────────────
+function showEntryScreen() {
+  document.body.innerHTML = `
+<div class="login-page" style="flex-direction:column;gap:20px">
+  <div style="text-align:center;color:#fff;margin-bottom:8px">
+    <div style="font-size:2rem;margin-bottom:8px">${icon('school','')}</div>
+    <div style="font-size:1.4rem;font-weight:700;font-family:var(--font-zh)">學力診斷預約系統</div>
+    <div style="font-size:.875rem;opacity:.75;margin-top:4px;font-family:var(--font-zh)">請選擇您的身分</div>
+  </div>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center">
+    <button id="btn-parent" style="background:#fff;border:none;border-radius:16px;padding:28px 32px;cursor:pointer;min-width:160px;transition:.15s;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+      <div style="font-size:2rem;margin-bottom:8px">${icon('users','')}</div>
+      <div style="font-size:1rem;font-weight:700;color:#1d9e75;font-family:var(--font-zh)">家長預約</div>
+      <div style="font-size:.8rem;color:#888780;margin-top:4px;font-family:var(--font-zh)">預約學力診斷時段</div>
+    </button>
+    <button id="btn-staff" style="background:#fff;border:none;border-radius:16px;padding:28px 32px;cursor:pointer;min-width:160px;transition:.15s;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+      <div style="font-size:2rem;margin-bottom:8px">${icon('shield','')}</div>
+      <div style="font-size:1rem;font-weight:700;color:#085041;font-family:var(--font-zh)">教師 / 管理員</div>
+      <div style="font-size:.8rem;color:#888780;margin-top:4px;font-family:var(--font-zh)">後台登入</div>
+    </button>
+  </div>
+</div>`;
+
+  document.querySelector('#btn-parent').addEventListener('click', mountParentView);
+  document.querySelector('#btn-staff').addEventListener('click', () => {
+    renderLogin(user => {
+      currentUser = user;
+      sessionStorage.setItem('ld_user', user.id);
+      mountApp();
+    });
+  });
+}
+
+// ── Parent view (no login needed) ─────────────────────────────────────────
+function mountParentView() {
+  const container = document.getElementById('app') || document.body;
+  container.innerHTML = '';
+  renderParentPage(container);
+  // Add a back button
+  const backBtn = document.createElement('button');
+  backBtn.className = 'btn btn-sm';
+  backBtn.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:50;box-shadow:0 2px 8px rgba(0,0,0,.15)';
+  backBtn.innerHTML = `← 返回`;
+  backBtn.addEventListener('click', showEntryScreen);
+  document.body.appendChild(backBtn);
+}
+
+// ── Staff app shell ────────────────────────────────────────────────────────
+function mountApp() {
+  const isAdmin   = currentUser.role === 'admin';
+  const isTeacher = currentUser.role === 'teacher';
+
+  const nav = isAdmin
+    ? [
+        { id: 'admin-overview',   label: '數據總覽',   ic: 'chart-bar' },
+        { id: 'admin-classrooms', label: '教室管理',   ic: 'office' },
+        { id: 'admin-accounts',   label: '帳號管理',   ic: 'shield' },
+      ]
+    : [
+        { id: 'teacher-slots',    label: '時段管理',   ic: 'calendar' },
+        { id: 'teacher-bookings', label: '預約名單',   ic: 'users' },
+      ];
+
+  const sidebarItems = nav.map(n =>
+    `<div class="sidebar-item ${n === nav[0] ? 'active' : ''}" data-page="${n.id}">
+      ${icon(n.ic, 'icon')} ${n.label}
+    </div>`
+  ).join('');
+
+  document.body.innerHTML = `
+<div class="app-shell">
+  <div class="topbar">
+    ${icon('school', 'icon')}
+    <span class="topbar-logo">學力診斷預約系統</span>
+    <div class="topbar-spacer"></div>
+    <div class="topbar-user">
+      <div class="avatar">${currentUser.name.slice(-1)}</div>
+      <span>${currentUser.name}${isAdmin ? '（管理員）' : ' 老師'}</span>
+      <button class="btn-logout" id="btn-logout">${icon('logout','icon')} 登出</button>
+    </div>
+  </div>
+  <div class="layout">
+    <div class="sidebar">${sidebarItems}</div>
+    <div class="main-content" id="main-content"></div>
+  </div>
+</div>
+<div class="toast-container"></div>`;
+
+  const mainContent = document.getElementById('main-content');
+
+  // Sidebar nav
+  document.querySelectorAll('.sidebar-item').forEach(item => {
+    item.addEventListener('click', () => {
+      document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+      renderPage(item.dataset.page, mainContent);
+    });
+  });
+
+  // Logout
+  document.getElementById('btn-logout').addEventListener('click', () => {
+    sessionStorage.removeItem('ld_user');
+    currentUser = null;
+    showEntryScreen();
+  });
+
+  // Render first page
+  renderPage(nav[0].id, mainContent);
+}
+
+function renderPage(pageId, container) {
+  container.innerHTML = '';
+  switch (pageId) {
+    case 'admin-overview':   renderAdminOverview(container); break;
+    case 'admin-classrooms': renderAdminClassrooms(container); break;
+    case 'admin-accounts':   renderAdminAccounts(container); break;
+    case 'teacher-slots':    renderTeacherSlots(container, currentUser); break;
+    case 'teacher-bookings': renderTeacherBookings(container, currentUser); break;
+  }
+}
+
+</script>
 </body>
 </html>
