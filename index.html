@@ -535,80 +535,6 @@ async function initData() {
 }
 
 // ── 帳號 ───────────────────────────────────────────────────────────────────
-const accountsDB = {
-  all:    ()        => ls('ld_accounts', []),
-  get:    id        => accountsDB.all().find(a => a.id === id) || null,
-  save:   list      => save('ld_accounts', list),
-  login:  (u, p)    => accountsDB.all().find(a => a.username === u && a.password === p && a.active) || null,
-  add:    account   => { const list = accountsDB.all(); list.push(account); accountsDB.save(list); },
-  update: (id, patch) => {
-    const list = accountsDB.all().map(a => a.id === id ? { ...a, ...patch } : a);
-    accountsDB.save(list);
-  },
-};
-
-// ── 教室 ───────────────────────────────────────────────────────────────────
-const classroomsDB = {
-  all:  ()      => ls('ld_classrooms', []),
-  get:  id      => classroomsDB.all().find(c => c.id === id) || null,
-  save: list    => save('ld_classrooms', list),
-  add:  classroom => { const list = classroomsDB.all(); list.push(classroom); classroomsDB.save(list); },
-  update: (id, patch) => {
-    const list = classroomsDB.all().map(c => c.id === id ? { ...c, ...patch } : c);
-    classroomsDB.save(list);
-  },
-};
-
-// ── 時段 ───────────────────────────────────────────────────────────────────
-const slotsDB = {
-  all:          ()           => ls('ld_slots', []),
-  byClassroom:  cid          => slotsDB.all().filter(s => s.classroomId === cid),
-  get:          id           => slotsDB.all().find(s => s.id === id) || null,
-  save:         list         => save('ld_slots', list),
-  add:          slot         => { const list = slotsDB.all(); list.push(slot); slotsDB.save(list); },
-  delete:       id           => { slotsDB.save(slotsDB.all().filter(s => s.id !== id)); },
-  update:       (id, patch)  => {
-    slotsDB.save(slotsDB.all().map(s => s.id === id ? { ...s, ...patch } : s));
-  },
-};
-
-// ── 預約 ───────────────────────────────────────────────────────────────────
-const bookingsDB = {
-  all:         ()  => ls('ld_bookings', []),
-  bySlot:      sid => bookingsDB.all().filter(b => b.slotId === sid),
-  byClassroom: cid => {
-    const slotIds = slotsDB.byClassroom(cid).map(s => s.id);
-    return bookingsDB.all().filter(b => slotIds.includes(b.slotId));
-  },
-  get:    id       => bookingsDB.all().find(b => b.id === id) || null,
-  save:   list     => save('ld_bookings', list),
-  add:    booking  => {
-    const list = bookingsDB.all();
-    list.push(booking);
-    bookingsDB.save(list);
-  },
-  cancel: id       => { bookingsDB.save(bookingsDB.all().filter(b => b.id !== id)); },
-  update: (id, patch) => {
-    bookingsDB.save(bookingsDB.all().map(b => b.id === id ? { ...b, ...patch } : b));
-  },
-};
-
-// ── 診斷紀錄 ───────────────────────────────────────────────────────────────
-const recordsDB = {
-  all:          ()  => ls('ld_records', []),
-  byBooking:    bid => recordsDB.all().find(r => r.bookingId === bid) || null,
-  byClassroom:  cid => {
-    const bids = bookingsDB.byClassroom(cid).map(b => b.id);
-    return recordsDB.all().filter(r => bids.includes(r.bookingId));
-  },
-  save:   list      => save('ld_records', list),
-  upsert: record    => {
-    const list = recordsDB.all().filter(r => r.bookingId !== record.bookingId);
-    list.push(record);
-    recordsDB.save(list);
-  },
-};
-
 // ── uid 工廠 ───────────────────────────────────────────────────────────────
 function uid(prefix = 'id') {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -626,25 +552,6 @@ function fmtDateTime(isoDate, time) {
 }
 
 // ── 統計輔助 ───────────────────────────────────────────────────────────────
-function statsForClassroom(cid) {
-  const slots    = slotsDB.byClassroom(cid);
-  const bookings = bookingsDB.byClassroom(cid);
-  const records  = recordsDB.byClassroom(cid);
-  const total    = bookings.length;
-  const done     = bookings.filter(b => b.status === 'done').length;
-  const pending  = bookings.filter(b => b.status === 'pending').length;
-  const scores   = records.filter(r => r.score != null).map(r => Number(r.score));
-  const avgScore = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
-
-  // 科目分佈
-  const subjectMap = {};
-  SUBJECTS.forEach(s => { subjectMap[s] = 0; });
-  bookings.forEach(b => {
-    if (b.subject) subjectMap[b.subject] = (subjectMap[b.subject] || 0) + 1;
-  });
-
-  return { total, done, pending, avgScore, subjectMap, slotCount: slots.length };
-}
 // Lightweight inline SVG icon helper
 // All icons from Heroicons outline set
 
