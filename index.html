@@ -1358,21 +1358,12 @@ function renderQueryResult(container, phone) {
 
       const b = bookingsDB.all().find(bk => bk.id === pendingCancelId);
 
-      // Update booking status
+      // Update booking status only（家長取消不寫診斷紀錄）
       await bookingsDB.update(pendingCancelId, {
         status: 'cancelled',
         cancelReason: finalReason,
         cancelledAt: new Date().toISOString(),
         cancelledBy: 'parent',
-      });
-
-      // Upsert record with outcome 4 (取消)
-      await recordsDB.upsert({
-        bookingId: pendingCancelId,
-        outcome: '4',
-        otherNote: `家長取消：${finalReason}`,
-        savedAt: new Date().toISOString(),
-        teacherId: 'parent',
       });
 
       document.getElementById('cancel-modal').classList.add('hidden');
@@ -2045,14 +2036,16 @@ function renderAdminOverview(container) {
   function statsForClassroomFiltered(cid, filteredBookings) {
     const bookings = filteredBookings.filter(b => (b.classroomId||b.classroom_id)===cid);
     const records  = recordsDB.byClassroom(cid);
-    const done     = bookings.filter(b => {
-      if (b.status==='cancelled') return true;
+    const parentCanc = bookings.filter(b=>b.status==='cancelled'&&(b.cancelledBy||b.cancelled_by)==='parent').length;
+    const teacherDone = bookings.filter(b => {
+      if (b.status==='cancelled') return false; // 家長取消不算老師填寫
       return !!records.find(r=>(r.bookingId||r.booking_id)===b.id)?.outcome;
     }).length;
+    const done = teacherDone; // bar chart 用老師填寫數
     const subjectMap = {};
     SUBJECTS.forEach(s => { subjectMap[s] = 0; });
     bookings.forEach(b => { if (b.subject) subjectMap[b.subject]=(subjectMap[b.subject]||0)+1; });
-    return { total: bookings.length, done, subjectMap };
+    return { total: bookings.length, done, parentCanc, subjectMap };
   }
 
   function renderStats(region) {
@@ -2065,17 +2058,20 @@ function renderAdminOverview(container) {
       return !!b;
     });
 
-    const total      = allBookings.length;
-    const cancelled  = allBookings.filter(b => b.status==='cancelled').length;
-    // 後續狀況統計（1-5 + 待填寫）
-    const o1 = allRecords.filter(r=>r.outcome==='1').length; // 已出席已註冊
-    const o2 = allRecords.filter(r=>r.outcome==='2').length; // 已出席未註冊
-    const o3 = allRecords.filter(r=>r.outcome==='3').length; // 未出席
-    const o4 = allRecords.filter(r=>r.outcome==='4').length; // 取消重預約
-    const o5 = allRecords.filter(r=>r.outcome==='5').length; // 其他
-    const filled     = o1+o2+o3+o4+o5+cancelled;
-    const pending    = total - filled;
-    const rate       = total ? Math.round(filled/total*100) : 0;
+    const total = allBookings.length;
+    // 家長主動取消（不需老師填寫）
+    const parentCancelled = allBookings.filter(b => b.status==='cancelled' && (b.cancelledBy||b.cancelled_by)==='parent').length;
+    // 老師填寫的後續狀況（排除家長取消，因為那筆不應有 record）
+    const teacherBookingIds = new Set(allBookings.filter(b=>b.status!=='cancelled').map(b=>b.id));
+    const o1 = allRecords.filter(r=>r.outcome==='1'&&teacherBookingIds.has(r.bookingId||r.booking_id)).length;
+    const o2 = allRecords.filter(r=>r.outcome==='2'&&teacherBookingIds.has(r.bookingId||r.booking_id)).length;
+    const o3 = allRecords.filter(r=>r.outcome==='3'&&teacherBookingIds.has(r.bookingId||r.booking_id)).length;
+    const o4 = allRecords.filter(r=>r.outcome==='4'&&teacherBookingIds.has(r.bookingId||r.booking_id)).length;
+    const o5 = allRecords.filter(r=>r.outcome==='5'&&teacherBookingIds.has(r.bookingId||r.booking_id)).length;
+    const teacherFilled = o1+o2+o3+o4+o5;
+    const filled  = teacherFilled; // 已填寫 = 老師有填紀錄的
+    const pending = total - parentCancelled - teacherFilled; // 待填寫 = 剩下需要老師處理的
+    const rate    = (total-parentCancelled) ? Math.round(teacherFilled/(total-parentCancelled)*100) : 0;
 
     // 科目統計
     const subStats = {};
@@ -2094,13 +2090,13 @@ function renderAdminOverview(container) {
 
     // 後續狀況卡片
     const outcomeCards = [
-      { label:'已出席已註冊', val:o1, cls:'green', pct: total?Math.round(o1/total*100):0 },
-      { label:'已出席未註冊', val:o2, cls:'blue',  pct: total?Math.round(o2/total*100):0 },
-      { label:'未出席',       val:o3, cls:'red',   pct: total?Math.round(o3/total*100):0 },
-      { label:'取消重預約',   val:o4, cls:'amber',  pct: total?Math.round(o4/total*100):0 },
-      { label:'家長主動取消', val:cancelled, cls:'red', pct: total?Math.round(cancelled/total*100):0 },
-      { label:'其他',         val:o5, cls:'',       pct: total?Math.round(o5/total*100):0 },
-      { label:'待填寫',       val:pending, cls:'amber', pct: total?Math.round(pending/total*100):0 },
+      { label:'已出席已註冊', val:o1,             pct: total?Math.round(o1/total*100):0 },
+      { label:'已出席未註冊', val:o2,             pct: total?Math.round(o2/total*100):0 },
+      { label:'未出席',       val:o3,             pct: total?Math.round(o3/total*100):0 },
+      { label:'取消重預約',   val:o4,             pct: total?Math.round(o4/total*100):0 },
+      { label:'家長主動取消', val:parentCancelled,pct: total?Math.round(parentCancelled/total*100):0 },
+      { label:'其他',         val:o5,             pct: total?Math.round(o5/total*100):0 },
+      { label:'待填寫',       val:pending,        pct: total?Math.round(pending/total*100):0 },
     ];
 
     document.getElementById('overview-stats-area').innerHTML = `
@@ -2180,7 +2176,7 @@ function renderAdminOverview(container) {
                 const bks  = allBookings.filter(b=>(b.classroomId||b.classroom_id)===c.id);
                 const recs = allRecords.filter(r=>bks.find(b=>b.id===(r.bookingId||r.booking_id)));
                 const cc = o => recs.filter(r=>r.outcome===o).length;
-                const canc = bks.filter(b=>b.status==='cancelled').length;
+                const canc = bks.filter(b=>b.status==='cancelled'&&(b.cancelledBy||b.cancelled_by)==='parent').length;
                 const pend = bks.length - (cc('1')+cc('2')+cc('3')+cc('4')+cc('5')+canc);
                 const r2   = bks.length ? Math.round((bks.length-pend)/bks.length*100) : 0;
                 return `<tr>
