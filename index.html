@@ -870,14 +870,14 @@ function bindParentEvents(container) {
   container.querySelector('#btn-back-step1').addEventListener('click', () => goToStep(container, 1));
 
   // Step 2 → Confirm
-  container.querySelector('#btn-to-step3').addEventListener('click', () => {
+  container.querySelector('#btn-to-step3').addEventListener('click', async () => {
     if (!selectedSlotId) {
       const errEl = container.querySelector('#p-step2-error');
       errEl.textContent = '請選擇一個可用時段';
       errEl.classList.remove('hidden');
       return;
     }
-    confirmBooking(container);
+    await confirmBooking(container);
   });
 
   // New booking
@@ -966,7 +966,7 @@ function renderSlotPicker(container, classroomId) {
   });
 }
 
-function confirmBooking(container) {
+async function confirmBooking(container) {
   const slot      = slotsDB.get(selectedSlotId);
   const classroom = classroomsDB.get(step1Data.classroomId);
   const grade     = GRADES.find(g => g.id === step1Data.gradeId);
@@ -983,7 +983,7 @@ function confirmBooking(container) {
     status: 'pending',
     createdAt: new Date().toISOString(),
   };
-  bookingsDB.add(booking);
+  await bookingsDB.add(booking);
 
   const clsName  = classroom?.name  || '';
   const clsPhone = classroom?.phone || '';
@@ -1147,7 +1147,7 @@ function bindSlotEvents(container, user) {
   renderSlotsTable(container, user);
   populateDateFilter(container, user);
 
-  container.querySelector('#btn-add-slot').addEventListener('click', () => {
+  container.querySelector('#btn-add-slot').addEventListener('click', async () => {
     const date     = container.querySelector('#new-date').value;
     const time     = container.querySelector('#new-time').value;
     const capacity = 1;
@@ -1197,9 +1197,9 @@ function renderSlotsTable(container, user) {
   }).join('');
 
   tbody.querySelectorAll('[data-del]').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       if (!confirm('確定要刪除此時段？')) return;
-      slotsDB.delete(btn.dataset.del);
+      await slotsDB.delete(btn.dataset.del);
       renderSlotsTable(container, user);
       populateDateFilter(container, user);
       showToast('時段已刪除');
@@ -1420,7 +1420,7 @@ function openRecordModal(container, user, bookingId) {
 
   container.querySelector('#rec-cancel').addEventListener('click', () => modal.classList.add('hidden'));
 
-  container.querySelector('#rec-save').addEventListener('click', () => {
+  container.querySelector('#rec-save').addEventListener('click', async () => {
     const errEl   = container.querySelector('#rec-save-error');
     const selected = container.querySelector('input[name="outcome"]:checked');
     if (!selected) {
@@ -1743,7 +1743,7 @@ function openClsModal(container, cid) {
     </div>`;
 
   // Save classroom name/addr
-  container.querySelector('#btn-save-cls').addEventListener('click', () => {
+  container.querySelector('#btn-save-cls').addEventListener('click', async () => {
     const name  = container.querySelector('#edit-cls-name').value.trim();
     const addr  = container.querySelector('#edit-cls-addr').value.trim();
     const phone = container.querySelector('#edit-cls-phone').value.trim();
@@ -1757,7 +1757,7 @@ function openClsModal(container, cid) {
   });
 
   // Add new teacher
-  container.querySelector('#btn-add-teacher').addEventListener('click', () => {
+  container.querySelector('#btn-add-teacher').addEventListener('click', async () => {
     const name = container.querySelector('#new-t-name').value.trim();
     const user = container.querySelector('#new-t-user').value.trim();
     const pass = container.querySelector('#new-t-pass').value;
@@ -1774,7 +1774,7 @@ function openClsModal(container, cid) {
   // Bind save password buttons
   function bindTeacherActions() {
     container.querySelectorAll('[data-save-pw]').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const tid = btn.dataset.savePw;
         const pw  = container.querySelector(`#pw-${tid}`).value;
         if (!pw || pw.length < 6) { showToast('密碼至少需要6位', 'error'); return; }
@@ -1784,10 +1784,10 @@ function openClsModal(container, cid) {
       });
     });
     container.querySelectorAll('[data-toggle-t]').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const active = btn.dataset.active === 'true';
         if (!confirm(`確定要${active ? '停用' : '啟用'}此帳號？`)) return;
-        accountsDB.update(btn.dataset.toggleT, { active: !active });
+        await accountsDB.update(btn.dataset.toggleT, { active: !active });
         showToast(`帳號已${active ? '停用' : '啟用'}`);
         openClsModal(container, cid);
       });
@@ -1869,7 +1869,7 @@ function bindAccountEvents(container) {
     container.querySelector('#new-acc-cls').closest('.form-group').style.opacity = e.target.value === 'admin' ? '.4' : '1';
   });
 
-  container.querySelector('#btn-add-acc').addEventListener('click', () => {
+  container.querySelector('#btn-add-acc').addEventListener('click', async () => {
     const name = container.querySelector('#new-acc-name').value.trim();
     const user = container.querySelector('#new-acc-user').value.trim();
     const pass = container.querySelector('#new-acc-pass').value;
@@ -1921,10 +1921,10 @@ function renderAccountsTable(container) {
   }).join('');
 
   tbody.querySelectorAll('[data-toggle-acc]').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const active = btn.dataset.active === 'true';
       if (!confirm(`確定要${active?'停用':'啟用'}此帳號？`)) return;
-      accountsDB.update(btn.dataset.toggleAcc, { active: !active });
+      await accountsDB.update(btn.dataset.toggleAcc, { active: !active });
       renderAccountsTable(container);
       showToast(`帳號已${active?'停用':'啟用'}`);
     });
@@ -1940,7 +1940,7 @@ function renderAccountsTable(container) {
   });
 
   tbody.querySelectorAll('[data-del-acc]').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const acc = accountsDB.get(btn.dataset.delAcc);
       if (!acc) return;
       if (!confirm(`確定要永久刪除「${acc.name}」的帳號？此操作無法復原。`)) return;
