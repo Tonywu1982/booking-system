@@ -620,10 +620,26 @@ function renderLogin(onLogin) {
   </div>
 </div>`;
 
-  const doLogin = () => {
+  const doLogin = async () => {
     const u = document.querySelector('#login-user').value.trim();
     const p = document.querySelector('#login-pass').value;
-    const user = accountsDB.login(u, p);
+    // Try cache first
+    let user = accountsDB.login(u, p);
+    // Fallback: direct DB query (in case cache not loaded)
+    if (!user) {
+      try {
+        const rows = await supaFetch('GET', 'accounts', null, {
+          username: `eq.${u}`, password: `eq.${p}`, active: 'eq.true', limit: '1'
+        });
+        if (rows && rows.length > 0) {
+          user = normalizeAccount(rows[0]);
+          // Update cache
+          if (!(_cache.accounts||[]).find(a => a.id === user.id)) {
+            _cache.accounts = [...(_cache.accounts||[]), user];
+          }
+        }
+      } catch(e) { console.error('login query error', e); }
+    }
     if (user) {
       onLogin(user);
     } else {
