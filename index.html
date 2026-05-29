@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>學力診斷預約系統</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
 /* ── Reset & Base ─────────────────────────────────────────────────── */
@@ -1147,7 +1148,7 @@ function buildSlotPage(user) {
   return `
 <div class="page-header">
   <div class="page-title">開放時段管理</div>
-  <div class="page-subtitle">管理可供家長預約的診斷時段 ・ <span style="color:var(--amber-600);font-weight:600">⚠️ 資料存於本機瀏覽器，不同裝置需分別設定</span></div>
+  <div class="page-subtitle">管理可供家長預約的診斷時段</div>
 </div>
 
 <div class="card">
@@ -1536,22 +1537,18 @@ function populateBkDateFilter(container, user) {
 function exportRegionReport(region, cls, allBookings, allRecords) {
   const label = region === '全國' ? '全國' : region;
   const now   = new Date().toLocaleDateString('zh-TW').replace(/\//g,'-');
-
-  // BOM for Excel UTF-8
-  const BOM = '\uFEFF';
-
-  // ── 工作表1：預約明細 ────────────────────────────────────────────────
-  const headers1 = ['教室名稱','營業所','家長姓名','學生姓名','學年','科目','預約日期','預約時間','聯絡電話','後續狀況','其他說明','建立時間'];
   const OUTCOME_LABEL = {'1':'已出席，已註冊','2':'已出席，未註冊','3':'未出席','4':'取消重預約','5':'其他'};
   const GRADE_MAP = {};
   GRADES.forEach(g => { GRADE_MAP[g.id] = g.label; });
 
+  // ── 工作表1：預約明細 ──────────────────────────────────────────────────
+  const headers1 = ['教室名稱','營業所','家長姓名','學生姓名','學年','科目','預約日期','預約時間','聯絡電話','後續狀況','其他說明','建立時間'];
   const rows1 = allBookings.map(b => {
     const slot = slotsDB.all().find(s => s.id === (b.slotId||b.slot_id));
-    const cls2 = classroomsDB.get(b.classroomId||b.classroom_id);
+    const c2   = classroomsDB.get(b.classroomId||b.classroom_id);
     const rec  = allRecords.find(r => (r.bookingId||r.booking_id) === b.id);
     return [
-      cls2?.name||'', cls2?.region||'',
+      c2?.name||'', c2?.region||'',
       b.parentName||b.parent_name||'',
       b.studentName||b.student_name||'',
       GRADE_MAP[b.gradeId??b.grade_id]||'',
@@ -1564,39 +1561,51 @@ function exportRegionReport(region, cls, allBookings, allRecords) {
     ];
   });
 
-  // ── 工作表2：教室統計摘要 ───────────────────────────────────────────
+  // ── 工作表2：教室統計摘要 ──────────────────────────────────────────────
   const headers2 = ['教室名稱','營業所','累計預約','已出席已註冊','已出席未註冊','未出席','取消重預約','其他','待填寫'];
   const rows2 = cls.map(c => {
-    const bks = allBookings.filter(b => (b.classroomId||b.classroom_id) === c.id);
+    const bks  = allBookings.filter(b => (b.classroomId||b.classroom_id) === c.id);
     const recs = allRecords.filter(r => bks.find(b => b.id === (r.bookingId||r.booking_id)));
-    const count = outcome => recs.filter(r => r.outcome === outcome).length;
-    const filled = recs.length;
-    return [
-      c.name, c.region||'', bks.length,
-      count('1'), count('2'), count('3'), count('4'), count('5'),
-      bks.length - filled,
-    ];
+    const count = o => recs.filter(r => r.outcome === o).length;
+    return [c.name, c.region||'', bks.length, count('1'), count('2'), count('3'), count('4'), count('5'), bks.length-recs.length];
   });
 
-  // Build CSV (two sections separated by blank line)
-  function toCSV(headers, rows) {
+  // ── 用 SheetJS 建立真正的 xlsx ─────────────────────────────────────────
+  try {
+    const XLSX = window.XLSX;
+    if (!XLSX) throw new Error('SheetJS not loaded');
+
+    const wb = XLSX.utils.book_new();
+
+    // Sheet 1: 預約明細
+    const ws1data = [headers1, ...rows1];
+    const ws1 = XLSX.utils.aoa_to_sheet(ws1data);
+    // 設定欄寬
+    ws1['!cols'] = [20,8,8,8,8,6,10,6,12,12,16,10].map(w => ({wch:w}));
+    // 標題列樣式（粗體）
+    XLSX.utils.book_append_sheet(wb, ws1, '預約明細');
+
+    // Sheet 2: 教室統計
+    const ws2data = [headers2, ...rows2];
+    const ws2 = XLSX.utils.aoa_to_sheet(ws2data);
+    ws2['!cols'] = [22,8,8,10,10,8,10,6,8].map(w => ({wch:w}));
+    XLSX.utils.book_append_sheet(wb, ws2, '教室統計摘要');
+
+    // 產出並下載
+    XLSX.writeFile(wb, `KUMON學力診斷_${label}_${now}.xlsx`);
+    showToast(`${label} Excel 報表已下載`, 'success');
+  } catch(e) {
+    // Fallback to CSV if SheetJS fails
+    console.warn('SheetJS not available, falling back to CSV', e);
+    const BOM = '\uFEFF';
     const esc = v => `"${String(v??'').replace(/"/g,'""')}"`;
-    return [headers.map(esc).join(','), ...rows.map(r => r.map(esc).join(','))].join('\r\n');
+    const toCSV = (h,r) => [h,,...r].map(row => Array.isArray(row)?row.map(esc).join(','):row).join('\r\n');
+    const csv = BOM + toCSV(headers1, rows1) + '\r\n\r\n' + toCSV(headers2, rows2);
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const a = Object.assign(document.createElement('a'), {href:URL.createObjectURL(blob), download:`KUMON學力診斷_${label}_${now}.csv`});
+    a.click();
+    showToast(`${label} 報表已下載（CSV 格式）`, 'success');
   }
-
-  const csv = BOM +
-    `=== ${label} 預約明細 （${now}）===\r\n` + toCSV(headers1, rows1) +
-    '\r\n\r\n' +
-    `=== ${label} 教室統計摘要 ===\r\n` + toCSV(headers2, rows2);
-
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = `KUMON學力診斷_${label}_${now}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast(`${label} 報表已下載`, 'success');
 }
 
 // 教室帳號下載自己教室的報表
