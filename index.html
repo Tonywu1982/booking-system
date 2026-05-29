@@ -2033,9 +2033,11 @@ function renderAdminOverview(container) {
     return bookings.filter(b => {
       const slot = slotsDB.all().find(s => s.id===(b.slotId||b.slot_id));
       if (!slot) return false;
-      const d = slot.date;
-      if (dateFrom && d < dateFrom) return false;
-      if (dateTo   && d > dateTo)   return false;
+      // 統一取前10字 yyyy-mm-dd，避免 ISO timestamp 格式差異
+      const d = (slot.date||'').slice(0,10);
+      if (!d) return false;
+      if (dateFrom && d < dateFrom.slice(0,10)) return false;
+      if (dateTo   && d > dateTo.slice(0,10))   return false;
       return true;
     });
   }
@@ -2063,13 +2065,19 @@ function renderAdminOverview(container) {
       return !!b;
     });
 
-    const doneCount = allBookings.filter(b => {
-      if (b.status==='cancelled') return true;
-      return !!allRecords.find(r=>(r.bookingId||r.booking_id)===b.id)?.outcome;
-    }).length;
-    const total = allBookings.length;
-    const rate  = total ? Math.round(doneCount/total*100) : 0;
+    const total      = allBookings.length;
+    const cancelled  = allBookings.filter(b => b.status==='cancelled').length;
+    // 後續狀況統計（1-5 + 待填寫）
+    const o1 = allRecords.filter(r=>r.outcome==='1').length; // 已出席已註冊
+    const o2 = allRecords.filter(r=>r.outcome==='2').length; // 已出席未註冊
+    const o3 = allRecords.filter(r=>r.outcome==='3').length; // 未出席
+    const o4 = allRecords.filter(r=>r.outcome==='4').length; // 取消重預約
+    const o5 = allRecords.filter(r=>r.outcome==='5').length; // 其他
+    const filled     = o1+o2+o3+o4+o5+cancelled;
+    const pending    = total - filled;
+    const rate       = total ? Math.round(filled/total*100) : 0;
 
+    // 科目統計
     const subStats = {};
     SUBJECTS.forEach(s => subStats[s] = 0);
     allBookings.forEach(b => { if (b.subject) subStats[b.subject]=(subStats[b.subject]||0)+1; });
@@ -2084,13 +2092,45 @@ function renderAdminOverview(container) {
       ? `${dateFrom||'—'} ～ ${dateTo||'今日'}`
       : '全部時間';
 
+    // 後續狀況卡片
+    const outcomeCards = [
+      { label:'已出席已註冊', val:o1, cls:'green', pct: total?Math.round(o1/total*100):0 },
+      { label:'已出席未註冊', val:o2, cls:'blue',  pct: total?Math.round(o2/total*100):0 },
+      { label:'未出席',       val:o3, cls:'red',   pct: total?Math.round(o3/total*100):0 },
+      { label:'取消重預約',   val:o4, cls:'amber',  pct: total?Math.round(o4/total*100):0 },
+      { label:'家長主動取消', val:cancelled, cls:'red', pct: total?Math.round(cancelled/total*100):0 },
+      { label:'其他',         val:o5, cls:'',       pct: total?Math.round(o5/total*100):0 },
+      { label:'待填寫',       val:pending, cls:'amber', pct: total?Math.round(pending/total*100):0 },
+    ];
+
     document.getElementById('overview-stats-area').innerHTML = `
-      <div class="stat-grid">
-        <div class="stat-card"><div class="stat-label">${regionLabel} ／ ${dateLabel}</div><div class="stat-value">${total}</div><div class="stat-sub">預約數</div></div>
-        <div class="stat-card"><div class="stat-label">已填寫紀錄</div><div class="stat-value green">${doneCount}</div></div>
+      <!-- 總覽數字 -->
+      <div class="stat-grid" style="margin-bottom:16px">
+        <div class="stat-card">
+          <div class="stat-label">${regionLabel}</div>
+          <div class="stat-value">${total}</div>
+          <div class="stat-sub">${dateLabel}</div>
+        </div>
+        <div class="stat-card"><div class="stat-label">已填寫紀錄</div><div class="stat-value green">${filled}</div></div>
+        <div class="stat-card"><div class="stat-label">待填寫</div><div class="stat-value amber">${pending}</div></div>
         <div class="stat-card"><div class="stat-label">填寫率</div><div class="stat-value green">${rate}%</div></div>
-        <div class="stat-card"><div class="stat-label">教室數</div><div class="stat-value amber">${cls.length}</div></div>
         <div class="stat-card"><div class="stat-label">教師帳號</div><div class="stat-value">${teacherCount}</div></div>
+      </div>
+
+      <!-- 後續狀況分類統計 -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">後續狀況分類</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px">
+          ${outcomeCards.map(o => `
+            <div style="background:var(--gray-50);border-radius:var(--radius-md);padding:12px 14px;text-align:center">
+              <div style="font-size:1.4rem;font-weight:700;color:var(--${o.cls?'green-700':'gray-700'})" class="${o.cls?'text-'+o.cls:''}"
+                   style="color:${o.cls==='green'?'#0f6e56':o.cls==='blue'?'#0c447c':o.cls==='red'?'#a32d2d':o.cls==='amber'?'#854f0b':'#444441'}">
+                ${o.val}
+              </div>
+              <div style="font-size:.75rem;color:var(--gray-500);font-family:var(--font-zh);margin-top:2px">${o.label}</div>
+              <div style="font-size:.7rem;color:var(--gray-400)">${o.pct}%</div>
+            </div>`).join('')}
+        </div>
       </div>
 
       <div class="grid-2">
@@ -2130,22 +2170,32 @@ function renderAdminOverview(container) {
         </div>
         <div class="table-wrap">
           <table class="table">
-            <thead><tr><th>教室</th><th>營業所</th><th>預約數</th><th>已填寫</th><th>填寫率</th><th>最熱門科目</th></tr></thead>
+            <thead><tr>
+              <th>教室</th><th>營業所</th><th>預約數</th>
+              <th>已出席已註冊</th><th>已出席未註冊</th><th>未出席</th>
+              <th>取消</th><th>待填寫</th><th>填寫率</th>
+            </tr></thead>
             <tbody>
               ${cStats.map(({c,s}) => {
-                const r2 = s.total ? Math.round(s.done/s.total*100) : 0;
-                const hotSub = Object.entries(s.subjectMap).sort((a,b)=>b[1]-a[1])[0];
+                const bks  = allBookings.filter(b=>(b.classroomId||b.classroom_id)===c.id);
+                const recs = allRecords.filter(r=>bks.find(b=>b.id===(r.bookingId||r.booking_id)));
+                const cc = o => recs.filter(r=>r.outcome===o).length;
+                const canc = bks.filter(b=>b.status==='cancelled').length;
+                const pend = bks.length - (cc('1')+cc('2')+cc('3')+cc('4')+cc('5')+canc);
+                const r2   = bks.length ? Math.round((bks.length-pend)/bks.length*100) : 0;
                 return `<tr>
                   <td class="fw-600 text-zh">${c.name}</td>
                   <td><span class="badge badge-blue">${c.region||'—'}</span></td>
-                  <td>${s.total}</td><td>${s.done}</td>
+                  <td class="fw-600">${bks.length}</td>
+                  <td>${cc('1')}</td><td>${cc('2')}</td><td>${cc('3')}</td>
+                  <td>${canc}</td>
+                  <td>${pend > 0 ? `<span class="badge badge-amber">${pend}</span>` : '0'}</td>
                   <td>
                     <div class="flex items-center gap-8">
-                      <div class="progress" style="width:50px"><div class="progress-fill" style="width:${r2}%"></div></div>
+                      <div class="progress" style="width:44px"><div class="progress-fill" style="width:${r2}%"></div></div>
                       <span style="font-size:.8rem">${r2}%</span>
                     </div>
                   </td>
-                  <td>${hotSub&&hotSub[1]>0?`<span class="badge badge-blue">${hotSub[0]}</span>`:'—'}</td>
                 </tr>`;
               }).join('')}
             </tbody>
