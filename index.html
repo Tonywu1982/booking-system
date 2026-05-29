@@ -2783,15 +2783,21 @@ function buildAccountPage() {
   <button class="btn btn-primary" id="btn-add-acc">${icon('user-plus','icon')} 新增帳號</button>
 </div>
 <div class="card">
-  <div class="flex justify-between items-center mb-16">
+  <div class="flex justify-between items-center mb-12" style="flex-wrap:wrap;gap:8px">
     <div class="card-title" style="margin-bottom:0;border:none;padding:0">帳號列表</div>
-    <select id="acc-filter-role" class="form-control" style="width:auto;font-size:.8rem">
-      <option value="">全部角色</option>
-      <option value="teacher">教師</option>
-      <option value="cs">客服</option>
-      <option value="admin">管理員</option>
-    </select>
+    <div class="flex gap-8" style="flex-wrap:wrap;align-items:center">
+      <input id="acc-search" class="form-control" placeholder="搜尋姓名、帳號或教室…"
+             style="width:210px;font-size:.825rem">
+      <select id="acc-filter-role" class="form-control" style="width:auto;font-size:.8rem">
+        <option value="">全部角色</option>
+        <option value="teacher">教師</option>
+        <option value="cs">客服</option>
+        <option value="admin">管理員</option>
+      </select>
+      <button class="btn btn-sm" id="btn-acc-reset">清除</button>
+    </div>
   </div>
+  <div id="acc-search-count" style="font-size:.8rem;color:var(--gray-500);margin-bottom:10px;font-family:var(--font-zh)"></div>
   <div class="table-wrap">
     <table class="table">
       <thead><tr><th>姓名</th><th>帳號</th><th>角色</th><th>所屬教室</th><th>狀態</th><th>操作</th></tr></thead>
@@ -2804,6 +2810,18 @@ function buildAccountPage() {
 function bindAccountEvents(container) {
   renderAccountsTable(container);
   container.querySelector('#acc-filter-role').addEventListener('change', () => renderAccountsTable(container));
+  container.querySelector('#acc-search').addEventListener('input', () => renderAccountsTable(container));
+  container.querySelector('#acc-search').addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      container.querySelector('#acc-search').value = '';
+      renderAccountsTable(container);
+    }
+  });
+  container.querySelector('#btn-acc-reset').addEventListener('click', () => {
+    container.querySelector('#acc-search').value = '';
+    container.querySelector('#acc-filter-role').value = '';
+    renderAccountsTable(container);
+  });
   container.querySelector('#new-acc-role').addEventListener('change', e => {
     const needCls = e.target.value === 'teacher';
     container.querySelector('#new-acc-cls').closest('.form-group').style.opacity = needCls ? '1' : '.4';
@@ -2832,11 +2850,35 @@ function bindAccountEvents(container) {
 }
 
 function renderAccountsTable(container) {
-  const tbody  = container.querySelector('#acc-tbody');
-  const filter = container.querySelector('#acc-filter-role')?.value || '';
+  const tbody    = container.querySelector('#acc-tbody');
+  const filter   = container.querySelector('#acc-filter-role')?.value || '';
+  const keyword  = (container.querySelector('#acc-search')?.value || '').trim().toLowerCase();
+  const countEl  = container.querySelector('#acc-search-count');
+
   let list = accountsDB.all().filter(a => !filter || a.role === filter);
 
-  if (!list.length) { tbody.innerHTML = `<tr><td colspan="6" class="table-empty">查無帳號</td></tr>`; return; }
+  if (keyword) {
+    list = list.filter(a => {
+      const cls = a.classroomId ? classroomsDB.get(a.classroomId) : null;
+      return (
+        (a.name||'').toLowerCase().includes(keyword) ||
+        (a.username||'').toLowerCase().includes(keyword) ||
+        (cls?.name||'').toLowerCase().includes(keyword)
+      );
+    });
+  }
+
+  const total = accountsDB.all().length;
+  if (countEl) {
+    countEl.textContent = keyword || filter
+      ? `找到 ${list.length} 筆（共 ${total} 個帳號）`
+      : `共 ${total} 個帳號`;
+  }
+
+  if (!list.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="table-empty">${keyword ? `查無「${keyword}」相關帳號` : '查無帳號'}</td></tr>`;
+    return;
+  }
 
   tbody.innerHTML = list.map(a => {
     const cls = a.classroomId ? classroomsDB.get(a.classroomId) : null;
