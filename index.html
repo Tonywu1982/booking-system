@@ -1045,8 +1045,8 @@ function buildBookingsPage(user) {
 
     <select id="bk-filter-status" class="form-control" style="width:auto;font-size:.8rem">
       <option value="">全部狀態</option>
-      <option value="pending">待診斷</option>
-      <option value="done">已完成</option>
+      <option value="unfilled">待填寫</option>
+      <option value="filled">已填寫</option>
     </select>
   </div>
   <div class="table-wrap">
@@ -1090,7 +1090,13 @@ function renderBookingsTable(container, user) {
   const slotIds = slotsDB.byClassroom(user.classroomId).map(s => s.id);
   let bookings  = bookingsDB.all()
     .filter(b => slotIds.includes(b.slotId))
-    .filter(b => !fStatus || b.status === fStatus);
+    .filter(b => {
+      if (!fStatus) return true;
+      const rec = recordsDB.byBooking(b.id);
+      if (fStatus === 'unfilled') return !rec?.outcome;
+      if (fStatus === 'filled')   return !!rec?.outcome;
+      return true;
+    });
 
   if (fDate) {
     bookings = bookings.filter(b => {
