@@ -623,22 +623,32 @@ function renderLogin(onLogin) {
   const doLogin = async () => {
     const u = document.querySelector('#login-user').value.trim();
     const p = document.querySelector('#login-pass').value;
+    console.log('[login] trying:', u, p);
+    console.log('[login] cache accounts count:', (_cache.accounts||[]).length);
     // Try cache first
     let user = accountsDB.login(u, p);
-    // Fallback: direct DB query (in case cache not loaded)
+    console.log('[login] cache result:', user);
+    // Fallback: direct DB query (no filter on active/password - get by username then check)
     if (!user) {
       try {
         const rows = await supaFetch('GET', 'accounts', null, {
-          username: `eq.${u}`, password: `eq.${p}`, active: 'is.true', limit: '1'
+          username: `eq.${u}`, select: '*', limit: '1'
         });
+        console.log('[login] DB rows:', JSON.stringify(rows));
         if (rows && rows.length > 0) {
-          user = normalizeAccount(rows[0]);
-          // Update cache
-          if (!(_cache.accounts||[]).find(a => a.id === user.id)) {
-            _cache.accounts = [...(_cache.accounts||[]), user];
+          const row = rows[0];
+          if (row.password === p && (row.active === true || row.active === 'true')) {
+            user = normalizeAccount(row);
+            if (!(_cache.accounts||[]).find(a => a.id === user.id)) {
+              _cache.accounts = [...(_cache.accounts||[]), user];
+            }
+          } else {
+            console.log('[login] password mismatch or inactive. DB pw:', row.password, 'input pw:', p, 'active:', row.active);
           }
+        } else {
+          console.log('[login] no user found with username:', u);
         }
-      } catch(e) { console.error('login query error', e); }
+      } catch(e) { console.error('[login] query error', e); }
     }
     if (user) {
       onLogin(user);
