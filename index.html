@@ -1719,11 +1719,21 @@ function renderBookingsTable(container, user) {
       </td>
       <td><span class="badge ${outcomeCls}">${outcomeLabel}</span></td>
       <td>
-        ${b.status === 'cancelled' && b.cancelledBy === 'parent'
-          ? '<span class="badge badge-red" style="font-size:.75rem">家長主動取消</span>'
-          : `<button class="btn btn-sm btn-primary" data-open-record="${b.id}">
-              ${icon('edit','icon')} ${rec?.outcome ? '修改' : '填寫'}紀錄
-             </button>`}
+        ${(() => {
+          if (b.status === 'cancelled' && b.cancelledBy === 'parent') {
+            return '<span class="badge badge-red" style="font-size:.75rem">家長主動取消</span>';
+          }
+          const slotDt = slot ? new Date((slot.date||'').slice(0,10) + 'T' + (slot.time||'00:00') + ':00') : null;
+          const isPast = slotDt ? slotDt <= new Date() : true;
+          // 時間未到：顯示提示，無法操作
+          if (!isPast) {
+            return `<span class="text-xs text-muted" style="font-family:var(--font-zh)">⏳ 未到診斷時間</span>`;
+          }
+          // 時間已過：可填寫或修改
+          return `<button class="btn btn-sm ${rec?.outcome ? '' : 'btn-primary'}" data-open-record="${b.id}">
+            ${icon('edit','icon')} ${rec?.outcome ? '修改紀錄' : '填寫紀錄'}
+          </button>`;
+        })()}
       </td>
     </tr>`;
   }).join('');
@@ -1739,6 +1749,15 @@ function openRecordModal(container, user, bookingId) {
   const grade = GRADES.find(g => g.id === (b?.gradeId ?? b?.grade_id));
   const rec   = recordsDB.byBooking(bookingId) || {};
   const modal = container.querySelector('#record-modal');
+
+  // 時間未到，完全不允許開啟
+  const slotDt = slot ? new Date((slot.date||'').slice(0,10) + 'T' + (slot.time||'00:00') + ':00') : null;
+  const isPast = slotDt ? slotDt <= new Date() : true;
+  if (!isPast) {
+    const slotTimeStr = slot ? `${fmtDate(slot.date)} ${slot.time}` : '';
+    showToast(`診斷時間（${slotTimeStr}）尚未到，無法填寫後續狀況`, 'error');
+    return;
+  }
 
   const OUTCOMES = [
     { value: '1', label: '已出席學診，已註冊',           icon: '✅', badge: 'badge-green' },
