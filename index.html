@@ -2071,20 +2071,23 @@ function renderAdminOverview(container) {
 
   // 快速區間選項
   function setQuickRange(type) {
-    const now   = new Date();
-    const today = now.toISOString().slice(0,10);
-    const pad   = n => String(n).padStart(2,'0');
+    const now = new Date();
+    // 用本地時間（避免 UTC 時差造成日期偏移）
+    const pad = n => String(n).padStart(2,'0');
+    const localDate = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    const today = localDate(now);
+
     if (type === 'this_month') {
       dateFrom = `${now.getFullYear()}-${pad(now.getMonth()+1)}-01`;
       dateTo   = today;
     } else if (type === 'last_month') {
-      const lm = new Date(now.getFullYear(), now.getMonth()-1, 1);
+      const lm  = new Date(now.getFullYear(), now.getMonth()-1, 1);
       const lme = new Date(now.getFullYear(), now.getMonth(), 0);
-      dateFrom = `${lm.getFullYear()}-${pad(lm.getMonth()+1)}-01`;
-      dateTo   = `${lme.getFullYear()}-${pad(lme.getMonth()+1)}-${pad(lme.getDate())}`;
+      dateFrom = localDate(lm);
+      dateTo   = localDate(lme);
     } else if (type === 'last_3m') {
       const d = new Date(now); d.setMonth(d.getMonth()-3);
-      dateFrom = d.toISOString().slice(0,10);
+      dateFrom = localDate(d);
       dateTo   = today;
     } else if (type === 'this_year') {
       dateFrom = `${now.getFullYear()}-01-01`;
@@ -2108,8 +2111,15 @@ function renderAdminOverview(container) {
     return bookings.filter(b => {
       const slot = slotsDB.all().find(s => s.id===(b.slotId||b.slot_id));
       if (!slot) return false;
-      // 統一取前10字 yyyy-mm-dd，避免 ISO timestamp 格式差異
-      const d = (slot.date||'').slice(0,10);
+      // slot.date 可能是 '2026-05-30' 或 '2026-05-29T16:00:00Z'（UTC）
+      // 統一取前10字，但如果是 UTC ISO 要用本地日期解析
+      let d = (slot.date||'').slice(0,10);
+      if ((slot.date||'').includes('T')) {
+        // 有時間部份代表可能是 UTC，用 Date 物件轉成本地日期
+        const dt = new Date(slot.date);
+        const pad = n => String(n).padStart(2,'0');
+        d = `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`;
+      }
       if (!d) return false;
       if (dateFrom && d < dateFrom.slice(0,10)) return false;
       if (dateTo   && d > dateTo.slice(0,10))   return false;
@@ -2289,8 +2299,11 @@ function renderAdminOverview(container) {
   }
 
   // ── 初始 HTML ─────────────────────────────────────────────────────────
-  const today     = new Date().toISOString().slice(0,10);
-  const monthStart= today.slice(0,7) + '-01';
+  // 用本地時間計算今天日期（避免 UTC+8 時差）
+  const _now = new Date();
+  const _pad = n => String(n).padStart(2,'0');
+  const today = `${_now.getFullYear()}-${_pad(_now.getMonth()+1)}-${_pad(_now.getDate())}`;
+  const monthStart = `${_now.getFullYear()}-${_pad(_now.getMonth()+1)}-01`;
 
   container.innerHTML = `
 <div class="page-header">
