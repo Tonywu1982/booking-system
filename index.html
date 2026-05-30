@@ -1712,10 +1712,22 @@ function renderBookingsTable(container, user) {
       <td>${grade?.label || '-'}</td>
       <td>${slot ? fmtDate(slot.date) : '-'}</td>
       <td style="font-family:var(--font-body);font-weight:600">${slot?.time || '-'}</td>
-      <td>
+      <td style="max-width:180px">
         ${b.status==='cancelled' && b.cancelReason
           ? `<span style="font-size:.8rem;color:var(--red-700);font-family:var(--font-zh)">原因：${b.cancelReason}</span>`
-          : (b.note||b.note_text) ? `<span style="font-size:.8rem;color:var(--gray-700);font-family:var(--font-zh);max-width:140px;display:inline-block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${b.note||''}">${b.note||''}</span>` : '<span class="text-muted text-xs">—</span>'}
+          : (b.note||b.note_text)
+            ? `<div style="font-size:.8rem;color:var(--gray-700);font-family:var(--font-zh)">
+                <div class="note-preview-${b.id}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;cursor:pointer" 
+                     onclick="this.style.display='none';document.getElementById('note-full-${b.id}').style.display='block'"
+                     title="點擊展開完整備註">
+                  ${(b.note||b.note_text||'').replace(/</g,'&lt;')}
+                </div>
+                <div id="note-full-${b.id}" style="display:none;white-space:pre-wrap;word-break:break-all;max-width:180px;cursor:pointer"
+                     onclick="this.style.display='none';document.querySelector('.note-preview-${b.id}').style.display='block'">
+                  ${(b.note||b.note_text||'').replace(/</g,'&lt;')}
+                </div>
+               </div>`
+            : '<span class="text-muted text-xs">—</span>'}
       </td>
       <td><span class="badge ${outcomeCls}">${outcomeLabel}</span></td>
       <td>
