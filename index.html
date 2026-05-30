@@ -2142,10 +2142,11 @@ function renderAdminOverview(container) {
       return !!b;
     });
 
-    const total = allBookings.length;
-    // 家長主動取消（不需老師填寫）
+    const allTotal = allBookings.length;
+    // 家長主動取消：不算在預約統計內（已取消，不需追蹤）
     const parentCancelled = allBookings.filter(b => b.status==='cancelled' && (b.cancelledBy||b.cancelled_by)==='parent').length;
-    // 老師填寫的後續狀況（排除家長取消，因為那筆不應有 record）
+    const total = allTotal - parentCancelled; // 有效預約數（不含家長主動取消）
+    // 老師填寫的後續狀況（只看非家長取消的預約）
     const teacherBookingIds = new Set(allBookings.filter(b=>b.status!=='cancelled').map(b=>b.id));
     const o1 = allRecords.filter(r=>r.outcome==='1'&&teacherBookingIds.has(r.bookingId||r.booking_id)).length;
     const o2 = allRecords.filter(r=>r.outcome==='2'&&teacherBookingIds.has(r.bookingId||r.booking_id)).length;
@@ -2153,9 +2154,9 @@ function renderAdminOverview(container) {
     const o4 = allRecords.filter(r=>r.outcome==='4'&&teacherBookingIds.has(r.bookingId||r.booking_id)).length;
     const o5 = allRecords.filter(r=>r.outcome==='5'&&teacherBookingIds.has(r.bookingId||r.booking_id)).length;
     const teacherFilled = o1+o2+o3+o4+o5;
-    const filled  = teacherFilled; // 已填寫 = 老師有填紀錄的
-    const pending = total - parentCancelled - teacherFilled; // 待填寫 = 剩下需要老師處理的
-    const rate    = (total-parentCancelled) ? Math.round(teacherFilled/(total-parentCancelled)*100) : 0;
+    const filled  = teacherFilled;
+    const pending = total - teacherFilled; // 待填寫 = 有效預約 - 已填寫
+    const rate    = total ? Math.round(teacherFilled/total*100) : 0;
 
     // 科目統計
     const subStats = {};
@@ -2178,7 +2179,7 @@ function renderAdminOverview(container) {
       { label:'已出席未註冊', val:o2,             pct: total?Math.round(o2/total*100):0 },
       { label:'未出席',       val:o3,             pct: total?Math.round(o3/total*100):0 },
       { label:'取消重預約',   val:o4,             pct: total?Math.round(o4/total*100):0 },
-      { label:'家長主動取消', val:parentCancelled,pct: total?Math.round(parentCancelled/total*100):0 },
+      { label:'家長主動取消', val:parentCancelled,pct: allTotal?Math.round(parentCancelled/allTotal*100):0 },
       { label:'其他',         val:o5,             pct: total?Math.round(o5/total*100):0 },
       { label:'待填寫',       val:pending,        pct: total?Math.round(pending/total*100):0 },
     ];
@@ -2436,7 +2437,7 @@ function buildClassroomPage() {
   <div class="card-title">教室列表</div>
   <div class="table-wrap">
     <table class="table">
-      <thead><tr><th>教室名稱</th><th>營業所</th><th>電話</th><th>教師</th><th>預約數</th><th>操作</th></tr></thead>
+      <thead><tr><th>教室名稱 ／ 營業所</th><th>電話</th><th>教師</th><th>預約數</th><th>狀態</th><th>操作</th></tr></thead>
       <tbody id="cls-tbody"></tbody>
     </table>
   </div>
@@ -2528,7 +2529,7 @@ function renderClassroomsTable(container, keyword) {
     return `<tr style="${isActive?'':'opacity:.55'}">
       <td>
         <div class="fw-600 text-zh">${c.name}</div>
-        <div class="text-xs text-muted">${c.city||''}${c.district||''} ／ ${c.region||'—'}</div>
+        <div class="text-xs text-muted"><span class="badge badge-blue" style="font-size:.7rem">${c.region||'—'}</span></div>
       </td>
       <td class="text-muted text-sm" style="white-space:nowrap">${c.phone||'—'}</td>
       <td>${teachers} 位</td>
