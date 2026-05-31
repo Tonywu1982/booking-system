@@ -2562,10 +2562,12 @@ function bindClassroomEvents(container) {
   });
 }
 
-function renderClassroomsTable(container, keyword) {
+function renderClassroomsTable(container, keyword, region, activeFilter) {
   const tbody = container.querySelector('#cls-tbody');
   let list = classroomsDB.all();
-  if (keyword) list = list.filter(c => c.name.includes(keyword));
+  if (keyword)      list = list.filter(c => c.name.includes(keyword));
+  if (region)       list = list.filter(c => c.region === region);
+  if (activeFilter) list = list.filter(c => String(c.active !== false) === activeFilter);
   if (!list.length) {
     tbody.innerHTML = `<tr><td colspan="6" class="table-empty">查無符合教室</td></tr>`;
     return;
