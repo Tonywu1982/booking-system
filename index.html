@@ -796,7 +796,6 @@ function buildActiveCityOptions() {
 function buildParentPage() {
   const classrooms = classroomsDB.all();
   const gradeOptions = GRADES.map(g => `<option value="${g.id}">${g.label}</option>`).join('');
-  const subjectOptions = SUBJECTS.map(s => `<option value="${s}">${s}</option>`).join('');
 
   return `
 <div class="parent-layout">
@@ -845,8 +844,19 @@ function buildParentPage() {
         </div>
 
         <div class="form-group">
-          <label class="form-label">診斷科目 <span class="req">*</span></label>
-          <select id="p-subject" class="form-control">${subjectOptions}</select>
+          <label class="form-label">診斷科目 <span class="req">*</span>（可複選）</label>
+          <div id="p-subject-group" style="display:flex;gap:10px;margin-top:4px;flex-wrap:wrap">
+            ${SUBJECTS.map(s => `
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;
+                            padding:8px 14px;border:1.5px solid var(--gray-200);
+                            border-radius:var(--radius-sm);font-family:var(--font-zh);
+                            font-size:.9rem;background:var(--white);transition:.12s"
+                     class="subject-label">
+                <input type="checkbox" class="subject-cb" value="${s}"
+                       style="width:16px;height:16px;accent-color:#7DCDF4;cursor:pointer">
+                ${s}
+              </label>`).join('')}
+          </div>
         </div>
 
         <div class="form-group">
@@ -979,6 +989,13 @@ function bindParentEvents(container) {
     alert('【功能規劃中】實際上線後將發送 OTP 驗證碼至 ' + phone);
   });
   // 縣市 → 地區聯動
+  // 科目 checkbox 高亮
+  container.querySelectorAll('.subject-cb').forEach(cb => {
+    cb.addEventListener('change', () => {
+      cb.closest('.subject-label').classList.toggle('subject-selected', cb.checked);
+    });
+  });
+
   container.querySelector('#p-city').addEventListener('change', function() {
     const city    = this.value;
     const hier    = buildActiveHierarchy();
@@ -1027,6 +1044,11 @@ function bindParentEvents(container) {
     }
     if (!phone || !isValidPhone(phone)) {
       errEl.textContent = '請輸入正確的手機號碼（09xx-xxx-xxx，共10碼）';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    if (!subject) {
+      errEl.textContent = '請至少選擇一個診斷科目';
       errEl.classList.remove('hidden');
       return;
     }
@@ -1082,6 +1104,10 @@ function bindParentEvents(container) {
     container.querySelector('#p-parent-name').value = '';
     container.querySelector('#p-phone').value = '';
     container.querySelector('#p-note').value = '';
+    container.querySelectorAll('.subject-cb').forEach(cb => {
+      cb.checked = false;
+      cb.closest('.subject-label').classList.remove('subject-selected');
+    });
     container.querySelector('#p-city').value = '';
     container.querySelector('#p-district').innerHTML = '<option value="">-- 請選擇地區 --</option>';
     container.querySelector('#p-classroom').innerHTML = '<option value="">-- 請選擇教室 --</option>';
@@ -1595,7 +1621,7 @@ function buildSlotPage(user) {
   </div>
   <div class="table-wrap">
     <table class="table">
-      <thead><tr><th>日期</th><th>時間</th><th>容量</th><th>已預約</th><th>狀態</th><th>操作</th></tr></thead>
+      <thead><tr><th>日期</th><th>時間</th><th>已預約</th><th>狀態</th><th>操作</th></tr></thead>
       <tbody id="slots-tbody"></tbody>
     </table>
   </div>
@@ -1687,29 +1713,41 @@ function renderSlotsTable(container, user) {
   const tbody      = container.querySelector('#slots-tbody');
   const filterDate = container.querySelector('#filter-date')?.value || '';
   let slots = slotsDB.byClassroom(user.classroomId)
-    .filter(s => (!filterDate || s.date === filterDate))
-    .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+    .filter(s => (!filterDate || (s.date||'').slice(0,10) === filterDate))
+    .sort((a, b) => (a.date||'').localeCompare(b.date||'') || (a.time||'').localeCompare(b.time||''));
 
-  if (!slots.length) { tbody.innerHTML = `<tr><td colspan="7" class="table-empty">尚無時段，請新增</td></tr>`; return; }
+  if (!slots.length) { tbody.innerHTML = `<tr><td colspan="6" class="table-empty">尚無時段，請新增</td></tr>`; return; }
+
+  const TIMES = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30',
+    '13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30',
+    '17:00','17:30','18:00','19:00','19:30','20:00'];
 
   tbody.innerHTML = slots.map(s => {
     const booked = bookingsDB.bySlot(s.id).length;
     const remain = s.capacity - booked;
     const full   = remain <= 0;
-    return `<tr>
-      <td>${fmtDate(s.date)}</td>
+    const dateStr = (s.date||'').slice(0,10);
+    const isPast  = new Date(dateStr + 'T' + s.time + ':00') < new Date();
+    return `<tr id="slot-row-${s.id}">
+      <td>${fmtDate(dateStr)}</td>
       <td><span style="font-family:var(--font-body);font-weight:600">${s.time}</span></td>
-      <td>${s.capacity}</td>
       <td>${booked}</td>
       <td><span class="badge ${full ? 'badge-red' : 'badge-green'}">${full ? '已額滿' : `剩 ${remain}`}</span></td>
-      <td>
-        <button class="btn btn-sm btn-danger" data-del="${s.id}" ${booked > 0 ? 'disabled title="已有預約，無法刪除"' : ''}>
+      <td class="flex gap-8">
+        ${!isPast ? `<button class="btn btn-sm" data-edit="${s.id}"
+          data-date="${dateStr}" data-time="${s.time}"
+          style="color:var(--green-700);border-color:var(--green-400)">
+          ${icon('edit','icon')} 修改
+        </button>` : ''}
+        <button class="btn btn-sm btn-danger" data-del="${s.id}"
+          ${booked > 0 ? 'disabled title="已有預約，無法刪除"' : ''}>
           ${icon('trash','icon')} 刪除
         </button>
       </td>
     </tr>`;
   }).join('');
 
+  // ── 刪除 ──────────────────────────────────────────────────────────────
   tbody.querySelectorAll('[data-del]').forEach(btn => {
     btn.addEventListener('click', async () => {
       if (!confirm('確定要刪除此時段？')) return;
@@ -1717,6 +1755,76 @@ function renderSlotsTable(container, user) {
       renderSlotsTable(container, user);
       populateDateFilter(container, user);
       showToast('時段已刪除');
+    });
+  });
+
+  // ── 修改：點擊後把該列變成編輯模式 ────────────────────────────────────
+  tbody.querySelectorAll('[data-edit]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sid   = btn.dataset.edit;
+      const row   = document.getElementById('slot-row-' + sid);
+      const curDate = btn.dataset.date;
+      const curTime = btn.dataset.time;
+
+      const TIMES = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30',
+        '13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30',
+        '17:00','17:30','18:00','19:00','19:30','20:00'];
+
+      // 把這一列改成編輯模式
+      row.innerHTML = `
+        <td colspan="4" style="padding:8px 12px">
+          <div class="flex items-center gap-10" style="flex-wrap:wrap">
+            <div>
+              <label class="form-label" style="margin-bottom:3px">日期</label>
+              <input id="edit-date-${sid}" type="date" class="form-control"
+                     value="${curDate}" min="${new Date().toISOString().slice(0,10)}"
+                     style="width:155px;font-size:.85rem">
+            </div>
+            <div>
+              <label class="form-label" style="margin-bottom:3px">時間</label>
+              <select id="edit-time-${sid}" class="form-control" style="width:120px;font-size:.85rem">
+                ${TIMES.map(t => `<option ${t===curTime?'selected':''}>${t}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+        </td>
+        <td class="flex gap-8" style="padding:8px 12px">
+          <button class="btn btn-sm btn-primary" data-save="${sid}">
+            ${icon('check','icon')} 儲存
+          </button>
+          <button class="btn btn-sm" data-cancel-edit="${sid}">取消</button>
+        </td>`;
+
+      // 儲存
+      row.querySelector('[data-save]').addEventListener('click', async () => {
+        const newDate = document.getElementById('edit-date-' + sid).value;
+        const newTime = document.getElementById('edit-time-' + sid).value;
+        if (!newDate) { showToast('請選擇日期', 'error'); return; }
+
+        // 重複檢查
+        const dup = slotsDB.byClassroom(user.classroomId)
+          .find(s => s.id !== sid && (s.date||'').slice(0,10) === newDate && s.time === newTime);
+        if (dup) { showToast('此日期時間已有時段', 'error'); return; }
+
+        try {
+          // Supabase PATCH
+          await supaFetch('PATCH', 'slots', { date: newDate, time: newTime }, { id: `eq.${sid}` });
+          // 更新 cache
+          _cache.slots = (_cache.slots||[]).map(s =>
+            s.id === sid ? { ...s, date: newDate, time: newTime } : s
+          );
+          renderSlotsTable(container, user);
+          populateDateFilter(container, user);
+          showToast('時段已更新', 'success');
+        } catch(e) {
+          showToast('更新失敗：' + e.message, 'error');
+        }
+      });
+
+      // 取消：重新渲染還原
+      row.querySelector('[data-cancel-edit]').addEventListener('click', () => {
+        renderSlotsTable(container, user);
+      });
     });
   });
 }
@@ -2009,7 +2117,8 @@ function openRecordModal(container, user, bookingId) {
   // ── 樣式 ──────────────────────────────────────────────────────────────────
   let style = document.getElementById('outcome-style');
   if (!style) { style = document.createElement('style'); style.id='outcome-style'; document.head.appendChild(style); }
-  style.textContent = `.outcome-selected { border-color:#7DCDF4 !important; background:#edf8fe !important; }`;
+  style.textContent = `.outcome-selected { border-color:#7DCDF4 !important; background:#edf8fe !important; }
+.subject-selected { border-color:#7DCDF4 !important; background:#edf8fe !important; font-weight:600; }`;
 
   // ── 選項互動 ──────────────────────────────────────────────────────────────
   container.querySelectorAll('.outcome-label').forEach(lbl => {
@@ -2326,7 +2435,14 @@ function renderAdminOverview(container) {
     const done = teacherDone; // bar chart 用老師填寫數
     const subjectMap = {};
     SUBJECTS.forEach(s => { subjectMap[s] = 0; });
-    bookings.forEach(b => { if (b.subject) subjectMap[b.subject]=(subjectMap[b.subject]||0)+1; });
+    bookings.forEach(b => {
+      if (b.subject) {
+        b.subject.split('、').forEach(s => {
+          const key = s.trim();
+          if (key) subjectMap[key] = (subjectMap[key]||0)+1;
+        });
+      }
+    });
     return { total: bookings.length, done, parentCanc, subjectMap };
   }
 
@@ -2359,7 +2475,14 @@ function renderAdminOverview(container) {
     // 科目統計
     const subStats = {};
     SUBJECTS.forEach(s => subStats[s] = 0);
-    allBookings.forEach(b => { if (b.subject) subStats[b.subject]=(subStats[b.subject]||0)+1; });
+    allBookings.forEach(b => {
+      if (b.subject) {
+        b.subject.split('、').forEach(s => {
+          const key = s.trim();
+          if (SUBJECTS.includes(key)) subStats[key] = (subStats[key]||0)+1;
+        });
+      }
+    });
 
     const cStats = cls.map(c => ({ c, s: statsForClassroomFiltered(c.id, allBookings) }))
       .sort((a,b)=>b.s.total-a.s.total);
