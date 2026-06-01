@@ -1053,6 +1053,24 @@ function bindParentEvents(container) {
       errEl.classList.remove('hidden');
       return;
     }
+    // 重複預約防護：同手機號碼在同教室不能有待診斷的預約
+    const errEl = container.querySelector('#p-step2-error');
+    const existing = bookingsDB.all().filter(b => {
+      if (getRawPhone(b.phone) !== getRawPhone(step1Data.phone)) return false;
+      if ((b.classroomId||b.classroom_id) !== step1Data.classroomId) return false;
+      if (b.status === 'cancelled') return false;
+      const rec = recordsDB.byBooking(b.id);
+      if (rec?.outcome) return false; // 已填寫紀錄代表已完成
+      return true; // 還有未完成的預約
+    });
+    if (existing.length > 0) {
+      const slot = slotsDB.all().find(s => s.id===(existing[0].slotId||existing[0].slot_id));
+      const dateStr = slot ? fmtDate(slot.date) + ' ' + slot.time : '';
+      errEl.textContent = `此手機號碼在此教室已有待診斷的預約（${dateStr}），請先完成或取消後再預約。`;
+      errEl.classList.remove('hidden');
+      return;
+    }
+    errEl.classList.add('hidden');
     await confirmBooking(container);
   });
 
@@ -1205,12 +1223,27 @@ async function confirmBooking(container) {
 
   // LINE 訊息預覽
   const fmtPhone = step1Data.phone.replace(/(\d{4})(\d{3})(\d{3})/, '$1-$2-$3');
-  const lineMsg = `${step1Data.parentName} 家長您好，${step1Data.name} 同學已預約學力診斷。
+  const bookingId = booking.id;
+  const confirmUrl = `${window.location.origin}${window.location.pathname}?confirm=${bookingId}&phone=${step1Data.phone}`;
+  const lineMsg = `${step1Data.parentName} 家長您好，${step1Data.name} 同學已完成學力診斷預約！
+
 📅 ${dateStr} ${timeStr}
 🏫 ${clsName}
 📍 ${clsAddr}
-請準時出席，如有問題請聯絡教室：${clsPhone}`;
+📞 教室電話：${clsPhone}
+
+🔗 查看預約 / 取消：
+${confirmUrl}
+
+如需取消，請於診斷前點擊上方連結操作。`;
   container.querySelector('#line-msg-preview').textContent = lineMsg;
+  // 也更新簡訊預覽（SMS 訊息較短）
+  const smsMsg = `【KUMON學力診斷】${step1Data.name}同學已預約${dateStr}${timeStr}，${clsName}。查看/取消：${confirmUrl}`;
+  if (document.getElementById('btn-send-sms')) {
+    document.getElementById('btn-send-sms').onclick = () => {
+      alert(`【簡訊功能規劃中】\n將發送至 ${fmtPhone}：\n\n${smsMsg}`);
+    };
+  }
 
   // Google 行事曆連結
   if (slot) {
@@ -1450,6 +1483,30 @@ function renderTeacherSlots(container, user) {
   bindSlotEvents(container, user);
 }
 
+
+
+function generateBatchSlots(fromDate, toDate, dows, times) {
+  const slots = [];
+  const pad = n => String(n).padStart(2,'0');
+  let cur = new Date(fromDate + 'T00:00:00');
+  const end = new Date(toDate + 'T00:00:00');
+  while (cur <= end) {
+    if (dows.includes(cur.getDay())) {
+      const d = `${cur.getFullYear()}-${pad(cur.getMonth()+1)}-${pad(cur.getDate())}`;
+      times.forEach(t => slots.push({ date: d, time: t }));
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  return slots;
+}
+
+function switchSlotTab(tab) {
+  document.getElementById('tab-single').classList.toggle('active', tab==='single');
+  document.getElementById('tab-batch').classList.toggle('active', tab==='batch');
+  document.getElementById('panel-single').classList.toggle('hidden', tab!=='single');
+  document.getElementById('panel-batch').classList.toggle('hidden', tab!=='batch');
+}
+
 function buildSlotPage(user) {
   const today = new Date().toISOString().slice(0, 10);
   return `
@@ -1528,6 +1585,61 @@ function bindSlotEvents(container, user) {
   });
 
   container.querySelector('#filter-date').addEventListener('change', () => renderSlotsTable(container, user));
+
+  // 批次新增：預覽更新
+  function updateBatchPreview() {
+    const from = container.querySelector('#batch-date-from')?.value;
+    const to   = container.querySelector('#batch-date-to')?.value;
+    const dows = [...container.querySelectorAll('.batch-dow:checked')].map(c=>Number(c.value));
+    const times = [...container.querySelectorAll('.batch-time:checked')].map(c=>c.value);
+    const preview = container.querySelector('#batch-preview');
+    if (!from || !to || !dows.length || !times.length) { if(preview) preview.style.display='none'; return; }
+    const slots = generateBatchSlots(from, to, dows, times);
+    if (preview) {
+      preview.style.display = 'block';
+      preview.innerHTML = `預計新增 <strong>${slots.length}</strong> 個時段（已有時段自動略過）`;
+    }
+  }
+
+  ['#batch-date-from','#batch-date-to'].forEach(sel => {
+    container.querySelector(sel)?.addEventListener('change', updateBatchPreview);
+  });
+  container.addEventListener('change', e => {
+    if (e.target.classList.contains('batch-dow') || e.target.classList.contains('batch-time')) {
+      updateBatchPreview();
+    }
+  });
+
+  // 批次新增：執行
+  container.querySelector('#btn-batch-add')?.addEventListener('click', async () => {
+    const from  = container.querySelector('#batch-date-from').value;
+    const to    = container.querySelector('#batch-date-to').value;
+    const dows  = [...container.querySelectorAll('.batch-dow:checked')].map(c=>Number(c.value));
+    const times = [...container.querySelectorAll('.batch-time:checked')].map(c=>c.value);
+    const errEl = container.querySelector('#batch-add-error');
+
+    if (!from || !to) { errEl.textContent='請選擇日期範圍'; errEl.classList.remove('hidden'); return; }
+    if (from > to)    { errEl.textContent='開始日期不能晚於結束日期'; errEl.classList.remove('hidden'); return; }
+    if (!dows.length) { errEl.textContent='請選擇至少一個星期'; errEl.classList.remove('hidden'); return; }
+    if (!times.length){ errEl.textContent='請選擇至少一個時間'; errEl.classList.remove('hidden'); return; }
+    errEl.classList.add('hidden');
+
+    const toAdd = generateBatchSlots(from, to, dows, times)
+      .filter(s => !slotsDB.all().find(e => (e.classroomId||e.classroom_id)===user.classroomId && e.date===s.date && e.time===s.time));
+
+    if (!toAdd.length) { errEl.textContent='所選範圍內的時段都已存在'; errEl.classList.remove('hidden'); return; }
+
+    let added = 0;
+    for (const s of toAdd) {
+      try {
+        await slotsDB.add({ id: uid('sl'), classroomId: user.classroomId, date: s.date, time: s.time, capacity: 1 });
+        added++;
+      } catch(e) { /* skip duplicates */ }
+    }
+    renderSlotsTable(container, user);
+    populateDateFilter(container, user);
+    showToast(`成功新增 ${added} 個時段`, 'success');
+  });
 }
 
 function renderSlotsTable(container, user) {
@@ -3394,7 +3506,20 @@ let currentUser = null;
     mountApp();
   } else {
     const params = new URLSearchParams(location.search);
-    if (params.get('view') === 'book') {
+    if (params.get('confirm')) {
+      // 從確認連結進入：直接跳到查詢頁並帶入電話號碼
+      mountParentView();
+      setTimeout(() => {
+        const phone = params.get('phone') || '';
+        const qInput = document.querySelector('#query-phone');
+        if (qInput && phone) {
+          // 格式化顯示
+          const digits = phone.replace(/\D/g,'');
+          qInput.value = digits.replace(/(\d{4})(\d{3})(\d{3})/, '$1-$2-$3');
+          document.querySelector('#btn-query')?.click();
+        }
+      }, 800);
+    } else if (params.get('view') === 'book') {
       mountParentView();
     } else {
       showEntryScreen();
