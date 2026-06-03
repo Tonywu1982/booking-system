@@ -1032,7 +1032,9 @@ function bindParentEvents(container) {
     const parentName = container.querySelector('#p-parent-name').value.trim();
     const phone      = container.querySelector('#p-phone').value.trim();
     const gradeId    = container.querySelector('#p-grade').value;
-    const subject    = container.querySelector('#p-subject').value;
+    // 多選科目：讀取所有勾選的 checkbox
+    const checkedSubjects = [...container.querySelectorAll('.subject-cb:checked')].map(c => c.value);
+    const subject    = checkedSubjects.join('、');
     const cid        = container.querySelector('#p-classroom').value;
     const note       = container.querySelector('#p-note').value.trim();
     const errEl      = container.querySelector('#p-step1-error');
@@ -2345,6 +2347,81 @@ function showNoteModal(el, note) {
   }
   document.getElementById('note-modal-content').textContent = note;
   overlay.style.display = 'flex';
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// Web Push 通知訂閱（需搭配後端 Edge Function 發送）
+// ══════════════════════════════════════════════════════════════════════════
+
+// VAPID 公鑰（正式上線前替換，用 web-push 工具產生）
+const VAPID_PUBLIC_KEY = 'YOUR_VAPID_PUBLIC_KEY_HERE';
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+  try {
+    const reg = await navigator.serviceWorker.register('./sw.js');
+    return reg;
+  } catch(e) {
+    console.warn('SW registration failed:', e);
+    return null;
+  }
+}
+
+async function subscribePush(userId, classroomId) {
+  const reg = await registerServiceWorker();
+  if (!reg) return false;
+
+  try {
+    // 檢查現有訂閱
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+    }
+
+    // 把訂閱資訊存到 Supabase
+    await supaFetch('POST', 'push_subscriptions', {
+      user_id:      userId,
+      classroom_id: classroomId,
+      subscription: JSON.stringify(sub),
+      updated_at:   new Date().toISOString(),
+    }, { on_conflict: 'user_id' });
+
+    return true;
+  } catch(e) {
+    console.warn('Push subscribe failed:', e);
+    return false;
+  }
+}
+
+async function unsubscribePush(userId) {
+  const reg = await navigator.serviceWorker?.getRegistration?.();
+  if (!reg) return;
+  const sub = await reg.pushManager.getSubscription();
+  if (sub) {
+    await sub.unsubscribe();
+    await supaFetch('DELETE', 'push_subscriptions', null, { user_id: `eq.${userId}` });
+  }
+}
+
+async function checkPushStatus() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return 'unsupported';
+  const reg = await navigator.serviceWorker?.getRegistration?.();
+  if (!reg) return 'unsubscribed';
+  const sub = await reg.pushManager.getSubscription();
+  return sub ? 'subscribed' : 'unsubscribed';
 }
 
 function showToast(msg, type = '') {
@@ -3869,6 +3946,10 @@ function mountApp() {
     <div class="topbar-user">
       <div class="avatar">${currentUser.name.slice(-1)}</div>
       <span>${currentUser.name}${isAdmin ? '（管理員）' : isCS ? '（客服）' : ' 老師'}</span>
+      ${isTeacher ? `<button class="btn-logout" id="btn-push-toggle" title="通知設定"
+        style="background:rgba(255,255,255,.12);padding:4px 8px;font-size:.85rem">
+        🔔
+      </button>` : ''}
       <button class="btn-logout" id="btn-logout">${icon('logout','icon')} 登出</button>
     </div>
   </div>
@@ -3896,6 +3977,40 @@ function mountApp() {
     currentUser = null;
     showEntryScreen();
   });
+
+  // 通知訂閱按鈕（老師專用）
+  const pushBtn = document.getElementById('btn-push-toggle');
+  if (pushBtn) {
+    // 初始化按鈕狀態
+    checkPushStatus().then(status => {
+      pushBtn.textContent = status === 'subscribed' ? '🔔' : '🔕';
+      pushBtn.title = status === 'subscribed' ? '已開啟通知（點擊關閉）' : status === 'unsupported' ? '此瀏覽器不支援通知' : '點擊開啟預約通知';
+    });
+
+    pushBtn.addEventListener('click', async () => {
+      const status = await checkPushStatus();
+      if (status === 'unsupported') {
+        alert('此瀏覽器不支援推播通知。\n建議使用 Chrome 或 Edge 瀏覽器，或將網站加入主畫面（PWA）。');
+        return;
+      }
+      if (status === 'subscribed') {
+        if (!confirm('確定要關閉預約通知嗎？')) return;
+        await unsubscribePush(currentUser.id);
+        pushBtn.textContent = '🔕';
+        pushBtn.title = '點擊開啟預約通知';
+        showToast('已關閉推播通知');
+      } else {
+        const ok = await subscribePush(currentUser.id, currentUser.classroomId || currentUser.classroom_id);
+        if (ok) {
+          pushBtn.textContent = '🔔';
+          pushBtn.title = '已開啟通知（點擊關閉）';
+          showToast('推播通知已開啟！', 'success');
+        } else {
+          alert('開啟通知失敗。請確認瀏覽器已允許此網站發送通知（網址列旁邊的鎖頭圖示）。');
+        }
+      }
+    });
+  }
 
   // Render first page
   renderPage(nav[0].id, mainContent);
