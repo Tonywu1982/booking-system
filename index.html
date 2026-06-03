@@ -1528,6 +1528,15 @@ function generateBatchSlots(fromDate, toDate, dows, times) {
   return slots;
 }
 
+
+// ── 時段視圖切換（行事曆 / 列表）─────────────────────────────────────────
+function switchSlotView(view) {
+  document.getElementById('view-tab-cal').classList.toggle('active', view==='cal');
+  document.getElementById('view-tab-list').classList.toggle('active', view==='list');
+  document.getElementById('cal-view').classList.toggle('hidden', view!=='cal');
+  document.getElementById('list-view').classList.toggle('hidden', view!=='list');
+}
+
 function switchSlotTab(tab) {
   document.getElementById('tab-single').classList.toggle('active', tab==='single');
   document.getElementById('tab-batch').classList.toggle('active', tab==='batch');
@@ -1614,18 +1623,52 @@ function buildSlotPage(user) {
 <div class="card">
   <div class="flex justify-between items-center" style="margin-bottom:14px">
     <div class="card-title" style="margin-bottom:0;border-bottom:none;padding-bottom:0">時段列表</div>
-    <div class="flex gap-8">
+    <div class="flex gap-8 items-center">
+      <div class="tab-bar" style="margin-bottom:0;padding:3px">
+        <button class="tab active" id="view-tab-cal" onclick="switchSlotView('cal')">📅 行事曆</button>
+        <button class="tab" id="view-tab-list" onclick="switchSlotView('list')">≡ 列表</button>
+      </div>
+      <select id="filter-date" class="form-control hidden" style="width:auto;font-size:.8rem">
+        <option value="">全部日期</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- 行事曆視圖 -->
+  <div id="cal-view">
+    <div class="flex justify-between items-center" style="margin-bottom:12px">
+      <button class="btn btn-sm" id="cal-prev">‹ 上個月</button>
+      <div id="cal-title" class="fw-600 text-zh" style="font-size:.95rem"></div>
+      <button class="btn btn-sm" id="cal-next">下個月 ›</button>
+    </div>
+    <!-- 星期標題 -->
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px">
+      ${['日','一','二','三','四','五','六'].map(d =>
+        `<div style="text-align:center;font-size:.75rem;font-weight:700;color:var(--gray-500);padding:4px;font-family:var(--font-zh)">週${d}</div>`
+      ).join('')}
+    </div>
+    <!-- 日期格 -->
+    <div id="cal-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px"></div>
+    <!-- 當日時段詳情 -->
+    <div id="cal-day-detail" class="hidden" style="margin-top:14px;background:var(--gray-50);border-radius:var(--radius-md);padding:14px 16px">
+      <div class="fw-600 text-zh" id="cal-day-title" style="margin-bottom:10px;font-size:.875rem"></div>
+      <div id="cal-day-slots"></div>
+    </div>
+  </div>
+
+  <!-- 列表視圖 -->
+  <div id="list-view" class="hidden">
+    <div class="flex gap-8" style="margin-bottom:12px">
       <select id="filter-date" class="form-control" style="width:auto;font-size:.8rem">
         <option value="">全部日期</option>
       </select>
-
     </div>
-  </div>
-  <div class="table-wrap">
-    <table class="table">
-      <thead><tr><th>日期</th><th>時間</th><th>已預約</th><th>狀態</th><th>操作</th></tr></thead>
-      <tbody id="slots-tbody"></tbody>
-    </table>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>日期</th><th>時間</th><th>已預約</th><th>狀態</th><th>操作</th></tr></thead>
+        <tbody id="slots-tbody"></tbody>
+      </table>
+    </div>
   </div>
 </div>`;
 }
@@ -1653,7 +1696,168 @@ function bindSlotEvents(container, user) {
     showToast('時段已新增', 'success');
   });
 
-  container.querySelector('#filter-date').addEventListener('change', () => renderSlotsTable(container, user));
+  container.querySelector('#filter-date')?.addEventListener('change', () => renderSlotsTable(container, user));
+
+  // ── 行事曆初始化 ──────────────────────────────────────────────────────
+  let calYear  = new Date().getFullYear();
+  let calMonth = new Date().getMonth(); // 0-indexed
+
+  function renderCalendar() {
+    const pad = n => String(n).padStart(2,'0');
+    const title = document.getElementById('cal-title');
+    const grid  = document.getElementById('cal-grid');
+    if (!title || !grid) return;
+
+    title.textContent = `${calYear} 年 ${calMonth+1} 月`;
+
+    const firstDay = new Date(calYear, calMonth, 1).getDay(); // 0=Sun
+    const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
+
+    // 本月所有時段（group by date）
+    const slotsByDate = {};
+    slotsDB.byClassroom(user.classroomId).forEach(s => {
+      const d = (s.date||'').slice(0,10);
+      const m = parseInt(d.split('-')[1]) - 1;
+      const y = parseInt(d.split('-')[0]);
+      if (y === calYear && m === calMonth) {
+        if (!slotsByDate[d]) slotsByDate[d] = [];
+        slotsByDate[d].push(s);
+      }
+    });
+
+    let cells = '';
+    // 空白格（月份第一天之前）
+    for (let i = 0; i < firstDay; i++) {
+      cells += `<div style="min-height:64px"></div>`;
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = `${calYear}-${pad(calMonth+1)}-${pad(day)}`;
+      const daySlots = slotsByDate[dateStr] || [];
+      const isToday  = dateStr === todayStr;
+      const isPast   = dateStr < todayStr;
+      const hasSlots = daySlots.length > 0;
+
+      const booked   = daySlots.filter(s => bookingsDB.bySlot(s.id).length > 0).length;
+      const full     = daySlots.filter(s => bookingsDB.bySlot(s.id).length >= s.capacity).length;
+
+      cells += `
+        <div onclick="showCalDay('${dateStr}', '${day}月${day}日')"
+             style="min-height:64px;border-radius:var(--radius-sm);padding:5px 6px;cursor:${hasSlots?'pointer':'default'};
+                    background:${isToday?'#1E1E1E':hasSlots?'var(--green-50)':'transparent'};
+                    border:1px solid ${isToday?'#1E1E1E':hasSlots?'var(--green-200)':'var(--gray-100)'};
+                    opacity:${isPast&&!hasSlots?'.35':'1'};
+                    transition:.12s">
+          <div style="font-size:.8rem;font-weight:${isToday?'700':'400'};
+                      color:${isToday?'#fff':isPast?'var(--gray-400)':'var(--gray-800)'};
+                      font-family:var(--font-body);margin-bottom:4px">${day}</div>
+          ${hasSlots ? `
+            <div style="font-size:.7rem;line-height:1.6">
+              ${daySlots.slice(0,3).map(s => {
+                const bk = bookingsDB.bySlot(s.id).length;
+                const isFull = bk >= s.capacity;
+                return `<div style="background:${isFull?'var(--red-50)':'var(--green-100)'};
+                               color:${isFull?'var(--red-700)':'var(--green-800)'};
+                               border-radius:3px;padding:1px 4px;font-family:var(--font-body);
+                               font-weight:600">${s.time}</div>`;
+              }).join('')}
+              ${daySlots.length > 3 ? `<div style="color:var(--gray-500);font-size:.65rem">+${daySlots.length-3} 筆</div>` : ''}
+            </div>` : ''}
+        </div>`;
+    }
+    grid.innerHTML = cells;
+
+    // 清除當日詳情
+    document.getElementById('cal-day-detail')?.classList.add('hidden');
+  }
+
+  window.showCalDay = function(dateStr, label) {
+    const daySlots = slotsDB.byClassroom(user.classroomId)
+      .filter(s => (s.date||'').slice(0,10) === dateStr)
+      .sort((a,b) => (a.time||'').localeCompare(b.time||''));
+
+    const detail = document.getElementById('cal-day-detail');
+    const title  = document.getElementById('cal-day-title');
+    const slotsEl = document.getElementById('cal-day-slots');
+    if (!detail || !daySlots.length) return;
+
+    title.textContent = `${fmtDate(dateStr)} 的時段`;
+
+    const pad = n => String(n).padStart(2,'0');
+    const TIMES = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30',
+      '13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30',
+      '17:00','17:30','18:00','19:00','19:30','20:00'];
+
+    slotsEl.innerHTML = daySlots.map(s => {
+      const bk    = bookingsDB.bySlot(s.id);
+      const booked = bk.length;
+      const full   = booked >= s.capacity;
+      const isPast = new Date(dateStr + 'T' + s.time + ':00') < new Date();
+      return `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;
+                    background:var(--white);border-radius:var(--radius-sm);
+                    border:1px solid var(--gray-100);margin-bottom:6px">
+          <div style="font-family:var(--font-body);font-weight:700;font-size:.9rem;min-width:50px">${s.time}</div>
+          <div style="flex:1">
+            <span class="badge ${full?'badge-red':'badge-green'}">${full?'已額滿':`剩 ${s.capacity - booked}`}</span>
+            ${booked > 0 ? `<span class="text-xs text-muted" style="margin-left:6px">${booked}人已預約</span>` : ''}
+          </div>
+          <div style="display:flex;gap:6px">
+            ${!isPast ? `<button class="btn btn-xs" onclick="calEditSlot('${s.id}','${dateStr}','${s.time}')"
+              style="color:var(--green-700);border-color:var(--green-400);font-size:.75rem">修改</button>` : ''}
+            <button class="btn btn-xs btn-danger"
+              onclick="calDeleteSlot('${s.id}',${booked})"
+              ${booked > 0 ? 'disabled title="已有預約"' : ''}
+              style="font-size:.75rem">刪除</button>
+          </div>
+        </div>`;
+    }).join('');
+
+    detail.classList.remove('hidden');
+  };
+
+  window.calEditSlot = function(sid, date, time) {
+    const TIMES = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30',
+      '13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30',
+      '17:00','17:30','18:00','19:00','19:30','20:00'];
+    const newDate = prompt('修改日期（yyyy-mm-dd）', date);
+    if (!newDate) return;
+    const newTime = prompt('修改時間', time);
+    if (!newTime || !TIMES.includes(newTime)) { showToast('時間格式不正確', 'error'); return; }
+
+    supaFetch('PATCH','slots',{date:newDate,time:newTime},{id:`eq.${sid}`}).then(() => {
+      _cache.slots = (_cache.slots||[]).map(s => s.id===sid ? {...s,date:newDate,time:newTime} : s);
+      renderCalendar();
+      populateDateFilter(container, user);
+      showToast('時段已更新','success');
+    }).catch(e => showToast('更新失敗：'+e.message,'error'));
+  };
+
+  window.calDeleteSlot = function(sid, booked) {
+    if (booked > 0) return;
+    if (!confirm('確定要刪除此時段？')) return;
+    slotsDB.delete(sid).then(() => {
+      renderCalendar();
+      populateDateFilter(container, user);
+      showToast('時段已刪除');
+    });
+  };
+
+  // 月份切換
+  document.getElementById('cal-prev').addEventListener('click', () => {
+    calMonth--;
+    if (calMonth < 0) { calMonth = 11; calYear--; }
+    renderCalendar();
+  });
+  document.getElementById('cal-next').addEventListener('click', () => {
+    calMonth++;
+    if (calMonth > 11) { calMonth = 0; calYear++; }
+    renderCalendar();
+  });
+
+  renderCalendar();
 
   // 批次新增：預覽更新
   function updateBatchPreview() {
